@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `usage-lens`: Console budgets act as the limit when there is no Go or Go Plus subscription.
+  - Sidebar shows the budget percentage, bar, spent/limit and reset date.
+  - `/limits` lists every budget with coverage, scope, remaining amount, reset and per-model spend.
+  - The primary budget is the one picked in the Console, then one covering the selected model, then the first one.
+
+### Fixed
+
+- `usage-lens`: an empty compact meter is no longer colored as a healthy limit.
+
 ## [0.1.0] - 2026-10-27
 
 ### Added

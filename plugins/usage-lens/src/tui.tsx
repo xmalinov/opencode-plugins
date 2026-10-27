@@ -16,20 +16,13 @@ import {
   sparkline,
   type UsagePoint,
 } from "./forecast.js"
+import { budgetBasis, budgetLabel, budgetPercent, pickBudget, type Budget } from "./budget.js"
 import { UsageRpc } from "./rpc.js"
 
 interface Meter {
   readonly percent: number
   readonly limited: boolean
   readonly resetsAt: number
-}
-
-interface Budget {
-  readonly limit: number
-  readonly spent: number
-  readonly resetsAt: number
-  readonly picked: boolean
-  readonly models: readonly { readonly name: string; readonly spent?: number }[]
 }
 
 interface Limits {
@@ -224,25 +217,43 @@ export default Plugin.define({
     }
 
     const monthly = () => limits()?.go?.monthly.percent ?? null
-    const budget = () =>
-      (limits()?.budgets ?? []).find((item) => item.picked) ?? limits()?.budgets?.[0]
-    const hasLimits = () => !!limits()?.go || !!budget()
+    const budgets = () => limits()?.budgets ?? []
+
+    const primaryBudget = (): Budget | undefined =>
+      pickBudget(budgets(), context.ui.model.current() ?? null)
+
+    const primaryPercent = () => {
+      const item = primaryBudget()
+      return item ? budgetPercent(item) : null
+    }
+
+    const hasLimits = () => !!limits()?.go || budgets().length > 0
 
     const meterLine = () => {
       const percent = monthly()
       if (percent === null) {
-        const item = budget()
-        return item ? `${formatMoney(item.spent)}/${formatMoney(item.limit)}` : "—"
+        const item = primaryBudget()
+        if (!item) return "—"
+        const value = budgetPercent(item)
+        if (value === null) return `$${formatMoney(item.spent)} spent`
+        return `${Math.round(value)}% ${bar(value)} · $${formatMoney(budgetBasis(item))}/$${formatMoney(
+          item.limit,
+        )}`
       }
       const value = Math.round(percent)
-      const item = budget()
+      const item = primaryBudget()
       const money = item ? ` · $${formatMoney(item.spent)}/$${formatMoney(item.limit)}` : ""
       return `${value}% ${bar(percent)}${money}`
     }
 
     const resetLine = () => {
       const go = limits()?.go
-      if (!go) return ""
+      if (!go) {
+        const item = primaryBudget()
+        if (!item) return ""
+        const more = budgets().length > 1 ? ` · ${budgets().length} budgets` : ""
+        return `reset ${formatSpan(item.resetsAt - Date.now())}${more}`
+      }
       const reset = formatSpan(go.monthly.resetsAt - Date.now())
       return `reset ${reset} · 5h ${Math.round(go.rolling.percent)}% · wk ${Math.round(
         go.weekly.percent,
@@ -286,8 +297,15 @@ export default Plugin.define({
       }
     }
 
+    const budgetReached = () => {
+      if (limits()?.go) return false
+      const item = primaryBudget()
+      return !!item && (budgetPercent(item) ?? 0) >= 100
+    }
+
     const paceLine = () => {
       if (limits()?.go?.monthly.limited) return "monthly limit reached"
+      if (budgetReached()) return "budget reached"
       const value = projection()
       if (!value) return ""
       if (value.kind === "limit") {
@@ -297,7 +315,7 @@ export default Plugin.define({
     }
 
     const paceColor = () => {
-      if (limits()?.go?.monthly.limited) return feedback.error
+      if (limits()?.go?.monthly.limited || budgetReached()) return feedback.error
       const value = projection()
       if (!value) return muted
       if (value.kind === "limit" && value.projected > 100) return feedback.warning
@@ -318,7 +336,20 @@ export default Plugin.define({
     const tariffColor = () =>
       tariffInfo()?.tier === "offPeak" ? feedback.success : muted
 
-    const plan = () => planLabel ?? (limits()?.go ? "Go" : "no plan limits")
+    const plan = () =>
+      planLabel ??
+      (limits()?.go ? "Go" : budgets().length > 0 ? "Console" : "no plan limits")
+
+    const planLine = () => {
+      const item = limits()?.go ? undefined : primaryBudget()
+      return item ? `${plan()} · ${budgetLabel(item)}` : plan()
+    }
+
+    const summaryColor = () => {
+      if (!hasLimits()) return muted
+      const percent = monthly() ?? primaryPercent()
+      return percent === null ? muted : feedback[meterColor(percent)]
+    }
 
     const summary = () => {
       if (error()) return <text fg={feedback.warning}>usage unavailable</text>
@@ -327,7 +358,7 @@ export default Plugin.define({
 
       if (compact) {
         return (
-          <text fg={feedback[meterColor(monthly() ?? 0)]}>
+          <text fg={summaryColor()}>
             {`usage ${hasLimits() ? meterLine() : "—"}${resetLine() ? ` · ${resetLine()}` : ""}${
               tariffLine() ? ` · ${tariffLine()}` : ""
             }`}
@@ -338,10 +369,8 @@ export default Plugin.define({
       return (
         <box flexDirection="column">
           {tariffInfo() ? <text fg={tariffColor()}>{tariffLine()}</text> : null}
-          <text fg={muted}>usage · {plan()}</text>
-          {hasLimits() ? (
-            <text fg={feedback[meterColor(monthly() ?? 0)]}>{meterLine()}</text>
-          ) : null}
+          <text fg={muted}>usage · {planLine()}</text>
+          {hasLimits() ? <text fg={summaryColor()}>{meterLine()}</text> : null}
           {paceLine() ? <text fg={paceColor()}>{paceLine()}</text> : null}
           {resetLine() ? <text fg={muted}>{resetLine()}</text> : null}
           <text fg={base}>{todayLine()}</text>
@@ -394,8 +423,8 @@ export default Plugin.define({
       if (tariffInfo()) lines.push(`tariff     ${tariffLine()}`)
       lines.push("")
 
-      lines.push("monthly limit")
       if (data.go) {
+        lines.push("Go allowance")
         lines.push(
           `  used     ${Math.round(data.go.monthly.percent)}%  ${
             data.go.monthly.limited ? "limit reached" : bar(data.go.monthly.percent)
@@ -412,14 +441,57 @@ export default Plugin.define({
             data.go.rolling.resetsAt - Date.now(),
           )}`,
         )
-      } else {
-        const item = budget()
-        if (item) {
-          lines.push(`  budget   $${formatMoney(item.spent)} / $${formatMoney(item.limit)}`)
+      }
+
+      const list = budgets()
+      if (list.length > 0) {
+        if (data.go) lines.push("")
+        lines.push("Console budgets")
+        list.forEach((item, index) => {
+          if (index > 0) lines.push("")
+          const percent = budgetPercent(item)
+          const title = `${budgetLabel(item)}${item.picked ? " · picked" : ""}${
+            item.shared ? " · shared" : ""
+          }`
+          lines.push(`  ${list.length > 1 ? `${index + 1}. ` : ""}${title}`)
+          lines.push(
+            `  used     ${
+              percent === null
+                ? "no limit"
+                : percent >= 100
+                  ? "limit reached"
+                  : `${Math.round(percent)}%  ${bar(percent)}`
+            }`,
+          )
+          lines.push(
+            `  spend    $${formatMoney(budgetBasis(item))} / $${formatMoney(item.limit)}`,
+          )
+          const left = item.limit - budgetBasis(item)
+          if (left > 0) lines.push(`  left     $${formatMoney(left)}`)
           lines.push(`  resets   in ${formatSpan(item.resetsAt - Date.now())}`)
-        } else {
-          lines.push("  none     no Go allowance or Console budget applies")
-        }
+          if (item.scope === "each") lines.push("  scope    per model")
+          if (item.scope === "combined") lines.push("  scope    combined")
+          if (item.inputPriceAtLeast && item.inputPriceAtLeast > 0) {
+            lines.push(`  prices   input from $${formatMoney(item.inputPriceAtLeast)} / 1M`)
+          }
+
+          const models = item.models
+            .filter((model) => (model.spent ?? 0) > 0)
+            .slice()
+            .sort((a, b) => (b.spent ?? 0) - (a.spent ?? 0))
+            .slice(0, 3)
+          if (models.length > 0) {
+            const parts = models.map((model) =>
+              item.scope === "each"
+                ? `${model.name} $${formatMoney(model.spent ?? 0)}/$${formatMoney(item.limit)}`
+                : `${model.name} $${formatMoney(model.spent ?? 0)}`,
+            )
+            lines.push(`  models   ${parts.join(" · ")}`)
+          }
+        })
+      } else if (!data.go) {
+        lines.push("monthly limit")
+        lines.push("  none     no Go allowance or Console budget applies")
       }
 
       const value = stats()
@@ -459,6 +531,8 @@ export default Plugin.define({
       const projected = projection()
       if (data.go?.monthly.limited) {
         lines.push("  on pace  monthly limit reached")
+      } else if (budgetReached()) {
+        lines.push("  on pace  budget limit reached")
       } else if (projected) {
         if (projected.kind === "limit") {
           lines.push(

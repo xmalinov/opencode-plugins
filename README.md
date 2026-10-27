@@ -18,7 +18,7 @@ Both are read-only toward your data, ship no telemetry, and work independently.
 | Plugin | What it does | OpenCode parts | Command |
 |---|---|---|---|
 | [tariff-pulse](plugins/tariff-pulse/README.md) | DeepSeek peak/off-peak tariff: badge near the composer, full schedule page, countdown to the next price window | server + TUI + RPC | `/tier` |
-| [usage-lens](plugins/usage-lens/README.md) | Allowance and spend panel in the sidebar: monthly limit, pace, forecast, reset date, per-model split | server + TUI + RPC | `/limits` |
+| [usage-lens](plugins/usage-lens/README.md) | Allowance and spend panel in the sidebar: Go allowance or Console budgets, pace, forecast, reset date, per-model split | server + TUI + RPC | `/limits` |
 
 `usage-lens` adds a tariff line to its panel only when `tariff-pulse` is installed. The dependency is optional and declared nowhere: the line is simply hidden otherwise.
 
@@ -33,19 +33,18 @@ Both are read-only toward your data, ship no telemetry, and work independently.
 
 ```
 # sidebar, usage-lens
-usage
-73% ███████░ · $58/$80
+usage · Go
+73% ███████░
+on pace 87% by reset
 reset 9d · 5h 41% · wk 62%
 today $3.42 · 14 steps · 150k
-Flash 61% · Pro 32%
-limit ~6d at this pace
 ```
 
 ## Requirements
 
 - **OpenCode V2** — developed and verified against `2.2.0`. V1 plugins use a different API and are not compatible.
 - `tariff-pulse` needs a DeepSeek-backed provider (`deepseek` or `opencode-go` by default).
-- `usage-lens` needs a signed-in OpenCode Console session; without it the panel shows `not connected` instead of failing.
+- `usage-lens` needs a signed-in OpenCode Console session; without it the panel shows `not connected` instead of failing. A Go subscription is optional: without it Console budgets act as the limit.
 
 ## Installation
 
@@ -81,7 +80,7 @@ opencode service status
 
 **tariff-pulse** encodes the DeepSeek schedule (peak `01:00–04:00` and `06:00–10:00` UTC, Mon–Fri; PRC holidays are off-peak all day) and the price table for the models it knows. Off-peak is exactly half of peak. The model catalogue in OpenCode lists the **off-peak** price, so the badge matters: during peak the real cost is twice what the model picker shows. When the bundled holiday calendar expires, the badge degrades to `▲?` instead of claiming peak.
 
-**usage-lens** reads `GET /api/experimental/usage/limits` for Go allowance and Console budgets, and `GET /api/experimental/session/stats` for today's spend, tokens and per-model split. It stores percentage snapshots locally to compute a measured pace, and projects the monthly limit linearly toward `resetsAt` the same way the Console does. Errors are contained: the panel shows `usage unavailable` rather than breaking the session.
+**usage-lens** reads `GET /api/experimental/usage/limits` for Go allowance and Console budgets, and `GET /api/experimental/session/stats` for today's spend, tokens and per-model split. A Go allowance is shown when the subscription is active; otherwise the workspace's Console budgets act as the limit (percent, spent/limit, reset and per-model split). It stores percentage snapshots locally to compute a measured pace, and projects the monthly limit linearly toward `resetsAt` the same way the Console does. Errors are contained: the panel shows `usage unavailable` rather than breaking the session.
 
 ## Repository layout
 
