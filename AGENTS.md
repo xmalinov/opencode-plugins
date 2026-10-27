@@ -1,0 +1,47 @@
+# AGENTS.md
+
+A repository of plugins for OpenCode V2. It currently contains two plugins: `plugins/tariff-pulse` and `plugins/usage-lens`. There is no build, test suite, linter or CI; type checking is optional and runs through a locally installed `typescript` — do not invent other commands.
+
+## Target version
+
+- OpenCode V2 (verified on v2.2.0). Use `@opencode/plugin` and `Plugin.define({ id, setup })`.
+- V1 plugins (`@opencode-ai/plugin`, a function-style plugin, the `"plugin"` field in config) do not run on V2. Do not copy V1 examples and do not mix the APIs.
+- Verify the API against https://opencode.ai/v2/docs/build/plugins and https://opencode.ai/v2/docs/build/plugins/server, not against V1 documentation.
+
+## Layout
+
+- `plugins/<name>/` — one plugin per directory.
+- Entry point: `src/index.ts` with `export default Plugin.define(...)` and a stable `id` (`ctx.storage` and diagnostics depend on it).
+- Convention: `src/index.ts` + `package.json` (`"type": "module"`, `exports` — at least `"."`, plus `"./tui"`, `"./rpc"`, `"./gui-experimental"` when present, dependency `@opencode/plugin`). Without `package.json`, OpenCode looks for an entry in the directory root (`index.ts`, `server.ts`), so `src/index.ts` without `exports` will not load.
+- A `plugins/` directory next to the root config is not scanned automatically (autoload applies only to `.opencode/plugins/`). For local checks, add the directory to `opencode.json`:
+  `{ "$schema": "https://opencode.ai/config.json", "plugins": ["./plugins/<name>"] }`
+  The path must point to the directory, not to a file.
+
+## Checking
+
+- Local `.ts` plugins load without a build.
+- Tracked config and plugins reload automatically. If changes are not picked up (local dependencies or directories outside watched paths) — `opencode service restart`, then `opencode service status`.
+- Load and hook errors: `~/.local/share/opencode/log/opencode.log`; for detail, run with `OPENCODE_LOG_LEVEL=DEBUG`.
+- Published packages are installed with `opencode plugin add <package>@<version>`; local ones only through `plugins` in the config. These plugins are not published yet.
+- There are no automated tests: verification means loading the plugin in OpenCode and calling its tool/hook manually. Do not add a test framework unless asked.
+
+## API pitfalls
+
+- `setup(ctx)` may return a cleanup function; cancel `ctx.event.subscribe()` subscriptions through an `AbortController`.
+- `*.transform(...)` callbacks are synchronous, cheap and repeatable: no one-off side effects. Load external data before the transform and call the relevant domain's `reload()` when it changes.
+- Tool: `input` is a JSON Schema, `execute` returns `{ content }`; pass `context.signal` for cancellable requests. The effective name includes the namespace (`acme_greeting`).
+- Hooks are registered on a domain (`ctx.session.hook`, `ctx.tool.hook`, `ctx.shell.hook`), not returned as an object like in V1.
+- `ctx.session.hook("context")` only affects the main agent loop; compaction, title and `generate` need their own hooks.
+- For publishing, pin an `@opencode/plugin` version compatible with the target OpenCode release.
+
+## Repository rules
+
+- Documentation is English-first. `README.md` is the primary README, `README.ru.md` is its Russian mirror; keep both in sync, including the per-plugin READMEs when user-visible behavior changes.
+- Update `CHANGELOG.md` under `Unreleased` for user-visible changes.
+- Do not commit `docs/` — it holds personal research notes and is excluded locally through `.git/info/exclude`.
+- Never send user data off the machine: both plugins read local OpenCode APIs only.
+- Keep pure logic (scheduling, pricing, forecasting) in modules without SDK imports so it can run under plain Node.
+
+## Git
+
+- Do not create commits unless the user explicitly asks. Leave changes in the working tree.

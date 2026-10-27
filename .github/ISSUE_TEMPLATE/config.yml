@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: OpenCode plugin documentation
+    url: https://opencode.ai/v2/docs/build/plugins
+    about: How OpenCode V2 plugins work — check this before reporting a platform issue.
+  - name: OpenCode discussions
+    url: https://github.com/sst/opencode/discussions
+    about: Questions about OpenCode itself, not about these plugins.

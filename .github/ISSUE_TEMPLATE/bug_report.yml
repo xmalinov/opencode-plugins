@@ -1,0 +1,75 @@
+name: Bug report
+description: Something does not work as documented
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please fill in enough detail to reproduce the problem.
+        Remove API keys, tokens and private paths from logs before pasting them.
+  - type: input
+    id: opencode-version
+    attributes:
+      label: OpenCode version
+      description: Output of `opencode --version`.
+      placeholder: 2.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Plugin
+      options:
+        - tariff-pulse
+        - usage-lens
+        - both
+        - repository / docs
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, including the exact badge or panel text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Configure ...
+        2. Run /tier ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Plugin options
+      description: The relevant entry from `opencode.json`, with secrets removed.
+      render: jsonc
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant lines from `~/.local/share/opencode/log/opencode.log`, ideally with `OPENCODE_LOG_LEVEL=DEBUG`.
+      render: text

@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest new behavior or a new plugin
+title: "[feat]: "
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: plugin
+    attributes:
+      label: Area
+      options:
+        - tariff-pulse
+        - usage-lens
+        - new plugin
+        - docs / repository
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is awkward or missing today? Describe the situation, not just the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What should the plugin do? Mention the command, option or UI surface involved.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds or other designs you have in mind.
+  - type: input
+    id: api
+    attributes:
+      label: Relevant OpenCode API
+      description: If the idea depends on a V2 API, link the docs page or endpoint.
