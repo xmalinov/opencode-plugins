@@ -1,0 +1,561 @@
+import { Plugin } from "@opencode/plugin/tui"
+import { Rpc } from "@opencode/plugin/rpc"
+import { createSignal } from "solid-js"
+import {
+  DAY,
+  bar,
+  cyclePace,
+  cycleStart,
+  forecast,
+  formatMoney,
+  formatSpan,
+  formatTokens,
+  meterColor,
+  modelShares,
+  pushPoint,
+  sparkline,
+  type UsagePoint,
+} from "./forecast.js"
+import { UsageRpc } from "./rpc.js"
+
+interface Meter {
+  readonly percent: number
+  readonly limited: boolean
+  readonly resetsAt: number
+}
+
+interface Budget {
+  readonly limit: number
+  readonly spent: number
+  readonly resetsAt: number
+  readonly picked: boolean
+  readonly models: readonly { readonly name: string; readonly spent?: number }[]
+}
+
+interface Limits {
+  readonly workspace: { readonly id: string; readonly name?: string; readonly usageURL: string }
+  readonly go?: { readonly rolling: Meter; readonly weekly: Meter; readonly monthly: Meter }
+  readonly budgets: readonly Budget[]
+}
+
+interface ModelUsage {
+  readonly model: { readonly id: string; readonly providerID: string }
+  readonly cost: number
+  readonly steps: number
+}
+
+interface Stats {
+  readonly cost: number
+  readonly steps: number
+  readonly sessions: number
+  readonly tokens: { readonly input: number; readonly output: number }
+  readonly models: readonly ModelUsage[]
+}
+
+interface Projection {
+  readonly kind: "limit" | "spend"
+  readonly projected: number
+}
+
+interface TariffInfo {
+  readonly tier: "peak" | "offPeak"
+  readonly nextChangeAt?: number
+  readonly peakMultiplier: number
+}
+
+/**
+ * Mirrors the public method of `tariff.pulse`. Declared locally so this plugin
+ * has no package dependency on the other one: absent, it simply hides the line.
+ */
+const TariffStatus = Rpc.define({
+  id: "tariff_pulse",
+  methods: {
+    status: {
+      input: {
+        type: "object",
+        properties: {
+          providerID: { type: "string" },
+          modelID: { type: "string" },
+        },
+        required: ["providerID", "modelID"],
+        additionalProperties: false,
+      },
+      output: {
+        type: "object",
+        properties: {
+          matched: { type: "boolean" },
+          tier: { type: "string" },
+          nextChangeAt: { type: "number" },
+          peakMultiplier: { type: "number" },
+        },
+        required: ["matched"],
+        additionalProperties: true,
+      },
+    },
+  },
+  events: {},
+})
+
+export default Plugin.define({
+  id: "usage.lens.cli",
+  setup(context) {
+    const options = context.options as Record<string, unknown>
+    const compact = options.compact === true
+    const planLabel = typeof options.plan === "string" ? options.plan : undefined
+
+    const [limits, setLimits] = createSignal<Limits | null>(null)
+    const [stats, setStats] = createSignal<Stats | null>(null)
+    const [month, setMonth] = createSignal<Stats | null>(null)
+    const [signedOut, setSignedOut] = createSignal(false)
+    const [error, setError] = createSignal<string | null>(null)
+    const [updatedAt, setUpdatedAt] = createSignal<number | null>(null)
+    const [tariffInfo, setTariffInfo] = createSignal<TariffInfo | null>(null)
+    const [back, setBack] = createSignal<ReturnType<typeof context.ui.router.current> | null>(null)
+    const [points, setPoints] = context.storage.store("points", {
+      initial: { items: [] as UsagePoint[] },
+    })
+
+    const theme = context.theme
+    const muted = theme.text.muted
+    const base = theme.text.base
+    const feedback = {
+      success: theme.text.feedback.success.base,
+      warning: theme.text.feedback.warning.base,
+      error: theme.text.feedback.error.base,
+    }
+
+    let busy = false
+
+    const loadTariff = async () => {
+      const model = context.ui.model.current()
+      if (!model) {
+        setTariffInfo(null)
+        return
+      }
+      try {
+        const result = (await context.client.rpc(TariffStatus).status({
+          providerID: model.providerID,
+          modelID: model.modelID,
+        })) as Record<string, unknown>
+        if (!result?.matched) {
+          setTariffInfo(null)
+          return
+        }
+        setTariffInfo({
+          tier: result.tier === "offPeak" ? "offPeak" : "peak",
+          nextChangeAt: typeof result.nextChangeAt === "number" ? result.nextChangeAt : undefined,
+          peakMultiplier:
+            typeof result.peakMultiplier === "number" ? result.peakMultiplier : 2,
+        })
+      } catch {
+        setTariffInfo(null)
+      }
+    }
+
+    const dayStart = () => {
+      const start = new Date()
+      start.setHours(0, 0, 0, 0)
+      return start.getTime()
+    }
+
+    const monthStart = () => {
+      const now = new Date()
+      return new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    }
+
+    const refresh = async () => {
+      if (busy) return
+      busy = true
+      void loadTariff()
+
+      const location = context.location ?? context.data.location.default()
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const now = Date.now()
+
+      const [limitResult, statsResult, monthResult] = await Promise.allSettled([
+        context.client.usage.limits({ location: { directory: location.directory } }),
+        context.client.session.stats({
+          from: dayStart(),
+          to: now,
+          timezone,
+          tools: "none",
+        }),
+        context.client.session.stats({
+          from: monthStart(),
+          to: now,
+          timezone,
+          tools: "none",
+        }),
+      ])
+
+      if (limitResult.status === "fulfilled") {
+        const data = (limitResult.value.data ?? null) as Limits | null
+        setSignedOut(data === null)
+        setLimits(data)
+        setError(null)
+        setUpdatedAt(Date.now())
+
+        if (data?.go) {
+          const point: UsagePoint = {
+            t: Date.now(),
+            monthly: data.go.monthly.percent,
+            weekly: data.go.weekly.percent,
+            rolling: data.go.rolling.percent,
+          }
+          const last = points.items[points.items.length - 1]
+          if (!last || point.t - last.t >= 5 * 60_000) {
+            await setPoints((draft) => {
+              draft.items = pushPoint(draft.items, point)
+            })
+            void context.client
+              .rpc(UsageRpc)
+              .ingest({ point })
+              .catch(() => undefined)
+          }
+        }
+      } else {
+        setError(limitResult.reason instanceof Error ? limitResult.reason.message : "usage API failed")
+      }
+
+      if (statsResult.status === "fulfilled") setStats(statsResult.value as Stats)
+      if (monthResult.status === "fulfilled") setMonth(monthResult.value as Stats)
+
+      busy = false
+    }
+
+    const monthly = () => limits()?.go?.monthly.percent ?? null
+    const budget = () =>
+      (limits()?.budgets ?? []).find((item) => item.picked) ?? limits()?.budgets?.[0]
+    const hasLimits = () => !!limits()?.go || !!budget()
+
+    const meterLine = () => {
+      const percent = monthly()
+      if (percent === null) {
+        const item = budget()
+        return item ? `${formatMoney(item.spent)}/${formatMoney(item.limit)}` : "—"
+      }
+      const value = Math.round(percent)
+      const item = budget()
+      const money = item ? ` · $${formatMoney(item.spent)}/$${formatMoney(item.limit)}` : ""
+      return `${value}% ${bar(percent)}${money}`
+    }
+
+    const resetLine = () => {
+      const go = limits()?.go
+      if (!go) return ""
+      const reset = formatSpan(go.monthly.resetsAt - Date.now())
+      return `reset ${reset} · 5h ${Math.round(go.rolling.percent)}% · wk ${Math.round(
+        go.weekly.percent,
+      )}%`
+    }
+
+    const todayLine = () => {
+      const value = stats()
+      if (!value) return "today —"
+      const tokens = formatTokens(value.tokens.input + value.tokens.output)
+      return `today $${formatMoney(value.cost)} · ${value.steps} steps · ${tokens}`
+    }
+
+    const cyclePoints = () => {
+      const go = limits()?.go
+      if (!go) return points.items
+      // Points from a previous monthly cycle would make the rate negative.
+      const start = cycleStart(go.monthly.resetsAt)
+      return points.items.filter((point) => point.t >= start)
+    }
+
+    const projection = (): Projection | null => {
+      const go = limits()?.go
+      if (go) {
+        // The Console forecasts from the average pace since the start of the
+        // period, not from recent snapshots. Match it: a measured 7-day rate
+        // produced a completely different "on pace" than the Console.
+        const pace = cyclePace(go.monthly.percent, go.monthly.resetsAt, Date.now())
+        if (!pace) return null
+        return { kind: "limit", projected: pace.projected }
+      }
+
+      const value = month()
+      if (!value) return null
+      const now = Date.now()
+      const elapsed = Math.max(0.5, (now - monthStart()) / DAY)
+      const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+      return {
+        kind: "spend",
+        projected: (value.cost / elapsed) * daysInMonth,
+      }
+    }
+
+    const paceLine = () => {
+      if (limits()?.go?.monthly.limited) return "monthly limit reached"
+      const value = projection()
+      if (!value) return ""
+      if (value.kind === "limit") {
+        return `on pace ${Math.round(value.projected)}% by reset`
+      }
+      return `on pace $${formatMoney(value.projected)}/mo`
+    }
+
+    const paceColor = () => {
+      if (limits()?.go?.monthly.limited) return feedback.error
+      const value = projection()
+      if (!value) return muted
+      if (value.kind === "limit" && value.projected > 100) return feedback.warning
+      return base
+    }
+
+    const tariffLine = () => {
+      const info = tariffInfo()
+      if (!info) return ""
+      const glyph = info.tier === "offPeak" ? "▼" : "▲"
+      const label = info.tier === "offPeak" ? "OFF −50%" : `PEAK ×${info.peakMultiplier}`
+      const countdown = info.nextChangeAt
+        ? ` · ${formatSpan(info.nextChangeAt - Date.now())}`
+        : ""
+      return `${glyph} ${label}${countdown}`
+    }
+
+    const tariffColor = () =>
+      tariffInfo()?.tier === "offPeak" ? feedback.success : muted
+
+    const plan = () => planLabel ?? (limits()?.go ? "Go" : "no plan limits")
+
+    const summary = () => {
+      if (error()) return <text fg={feedback.warning}>usage unavailable</text>
+      if (signedOut()) return <text fg={muted}>usage · not connected</text>
+      if (!limits()) return <text fg={muted}>usage · loading…</text>
+
+      if (compact) {
+        return (
+          <text fg={feedback[meterColor(monthly() ?? 0)]}>
+            {`usage ${hasLimits() ? meterLine() : "—"}${resetLine() ? ` · ${resetLine()}` : ""}${
+              tariffLine() ? ` · ${tariffLine()}` : ""
+            }`}
+          </text>
+        )
+      }
+
+      return (
+        <box flexDirection="column">
+          {tariffInfo() ? <text fg={tariffColor()}>{tariffLine()}</text> : null}
+          <text fg={muted}>usage · {plan()}</text>
+          {hasLimits() ? (
+            <text fg={feedback[meterColor(monthly() ?? 0)]}>{meterLine()}</text>
+          ) : null}
+          {paceLine() ? <text fg={paceColor()}>{paceLine()}</text> : null}
+          {resetLine() ? <text fg={muted}>{resetLine()}</text> : null}
+          <text fg={base}>{todayLine()}</text>
+        </box>
+      )
+    }
+
+    const onPage = () => {
+      const route = context.ui.router.current()
+      return route.type === "plugin" && route.name === "usage"
+    }
+
+    const openPage = () => {
+      const route = context.ui.router.current()
+      if (route.type !== "plugin") setBack(route)
+      context.ui.router.navigate({ type: "plugin", name: "usage" })
+    }
+
+    const goBack = () => {
+      const route = back()
+      setBack(null)
+      context.ui.router.navigate(route ?? { type: "home" })
+    }
+
+    const detail = () => {
+      const data = limits()
+      if (error()) {
+        return (
+          <box flexDirection="column">
+            <text fg={feedback.warning}>Usage API is unavailable</text>
+            <text fg={muted}>{error()}</text>
+            <text fg={muted}>/limits refresh — retry · esc — back</text>
+          </box>
+        )
+      }
+      if (signedOut()) {
+        return (
+          <box flexDirection="column">
+            <text fg={base}>Usage · not connected</text>
+            <text fg={muted}>Sign in to the OpenCode Console to see allowance and budgets.</text>
+            <text fg={muted}>esc — back</text>
+          </box>
+        )
+      }
+      if (!data) return <text fg={muted}>Loading…</text>
+
+      const lines: string[] = []
+      lines.push(`workspace  ${data.workspace.name ?? data.workspace.id}`)
+      lines.push(`plan       ${plan()}`)
+      if (tariffInfo()) lines.push(`tariff     ${tariffLine()}`)
+      lines.push("")
+
+      lines.push("monthly limit")
+      if (data.go) {
+        lines.push(
+          `  used     ${Math.round(data.go.monthly.percent)}%  ${
+            data.go.monthly.limited ? "limit reached" : bar(data.go.monthly.percent)
+          }`,
+        )
+        lines.push(`  resets   in ${formatSpan(data.go.monthly.resetsAt - Date.now())}`)
+        lines.push(
+          `  weekly   ${Math.round(data.go.weekly.percent)}% · resets in ${formatSpan(
+            data.go.weekly.resetsAt - Date.now(),
+          )}`,
+        )
+        lines.push(
+          `  rolling  ${Math.round(data.go.rolling.percent)}% · resets in ${formatSpan(
+            data.go.rolling.resetsAt - Date.now(),
+          )}`,
+        )
+      } else {
+        const item = budget()
+        if (item) {
+          lines.push(`  budget   $${formatMoney(item.spent)} / $${formatMoney(item.limit)}`)
+          lines.push(`  resets   in ${formatSpan(item.resetsAt - Date.now())}`)
+        } else {
+          lines.push("  none     no Go allowance or Console budget applies")
+        }
+      }
+
+      const value = stats()
+      if (value) {
+        lines.push("")
+        lines.push("today")
+        lines.push(
+          `  spend    $${formatMoney(value.cost)} · ${value.steps} steps · ${value.sessions} sessions`,
+        )
+        lines.push(
+          `  tokens   ${formatTokens(value.tokens.input)} in · ${formatTokens(
+            value.tokens.output,
+          )} out`,
+        )
+        for (const item of value.models.slice().sort((a, b) => b.cost - a.cost).slice(0, 5)) {
+          lines.push(`  ${shortModel(item.model.id).padEnd(9)} $${formatMoney(item.cost)}`)
+        }
+      }
+
+      lines.push("")
+      lines.push("forecast")
+      const pace = forecast(cyclePoints())
+      if (pace && pace.ratePerHour > 0) {
+        lines.push(
+          `  rate     ${pace.ratePerHour.toFixed(2)}%/h over ${Math.round(
+            pace.spanHours,
+          )}h (${pace.points} points)`,
+        )
+        if (pace.etaDays !== null) {
+          lines.push(`  limit    in ~${Math.round(pace.etaDays)} days at this rate`)
+        }
+      } else if (pace) {
+        lines.push("  rate     no change in the observation window")
+      } else {
+        lines.push("  rate     not enough history yet")
+      }
+      const projected = projection()
+      if (data.go?.monthly.limited) {
+        lines.push("  on pace  monthly limit reached")
+      } else if (projected) {
+        if (projected.kind === "limit") {
+          lines.push(
+            `  on pace  ${Math.round(projected.projected)}% of the monthly limit by reset`,
+          )
+        } else {
+          lines.push(`  on pace  $${formatMoney(projected.projected)} per month`)
+        }
+      } else if (data.go) {
+        lines.push("  on pace  not enough usage to forecast yet")
+      } else {
+        lines.push("  on pace  n/a (no month data yet)")
+      }
+      const monthValue = month()
+      if (monthValue) lines.push(`  month    $${formatMoney(monthValue.cost)} so far`)
+
+      lines.push("")
+      const updated = updatedAt()
+      lines.push(
+        `${updated ? new Date(updated).toLocaleTimeString() : "—"} · ${data.workspace.usageURL}`,
+      )
+      lines.push("/limits refresh — update · esc / q — back")
+
+      return <text fg={muted}>{lines.join("\n")}</text>
+    }
+
+    const unregisterRoute = context.ui.router.register({
+      name: "usage",
+      render: () => (
+        <box flexDirection="column">
+          {detail()}
+        </box>
+      ),
+    })
+
+    const unregisterSlot =
+      options.slot === "footer"
+        ? context.ui.slot({ append: "sidebar.footer", render: summary })
+        : context.ui.slot({ append: "sidebar.content", render: summary })
+
+    context.keymap.layer(() => ({
+      mode: "global",
+      priority: 10,
+      commands: [
+        {
+          id: "usage.lens.show",
+          title: "Limits: allowance, spend and forecast",
+          description: "OpenCode Go allowance and Console budgets",
+          group: "Usage",
+          palette: true,
+          slash: { name: "limits", aliases: ["spend"], arguments: true },
+          run: (input) => {
+            if ((input ?? "").trim().toLowerCase() === "refresh") return refresh()
+            if (onPage()) goBack()
+            else openPage()
+            return
+          },
+        },
+      ],
+    }))
+
+    context.keymap.layer(() => ({
+      mode: "global",
+      priority: 30,
+      enabled: onPage,
+      commands: [
+        {
+          id: "usage.lens.back",
+          title: "Limits: back",
+          bind: "escape",
+          run: goBack,
+        },
+        {
+          id: "usage.lens.back.q",
+          title: "Limits: back (q)",
+          bind: "q",
+          run: goBack,
+        },
+      ],
+    }))
+
+    const stop = context.data.on("session.execution.succeeded", () => {
+      void refresh()
+    })
+    const timer = setInterval(() => void refresh(), 60_000)
+    void refresh()
+
+    return () => {
+      clearInterval(timer)
+      stop()
+      unregisterSlot()
+      unregisterRoute()
+    }
+  },
+})
+
+function shortModel(id: string): string {
+  const clean = id.replace(/^.*\//, "")
+  return clean.length > 12 ? `${clean.slice(0, 11)}…` : clean
+}
