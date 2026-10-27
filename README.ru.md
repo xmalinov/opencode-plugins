@@ -91,24 +91,26 @@ plugins/<name>/
   src/tui.tsx       # TUI-часть
   src/rpc.ts        # RPC-контракт для обеих частей
   src/*.ts          # чистая логика без импортов SDK
+  test/*.test.ts    # юнит-тесты чистой логики (tariff-pulse)
 ```
 
-Чистые модули (`tariff.ts`, `forecast.ts`) не зависят от SDK и запускаются обычным скриптом на Node.
+Чистые модули (`tariff.ts`, `forecast.ts`) не зависят от SDK и запускаются обычным скриптом на Node. Часы тарифа покрыты юнит-тестами на встроенном раннере Node.
 
 ## Разработка
 
-Сборки, автотестов, линтера и CI нет. Локальные `.ts`-плагины загружаются без сборки.
+Сборки, линтера и CI нет. Локальные `.ts`-плагины загружаются без сборки. Тесты используют `node:test` и требуют Node с нативным стриппингом типов (`22.18+`, проверено на `24`).
 
 ```sh
-# проверка типов (dev-зависимости ставятся, но не коммитятся)
-npm install --no-save typescript @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
+# проверка типов и юнит-тесты (dev-зависимости ставятся, но не коммитятся)
+npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
 ./node_modules/.bin/tsc -p tsconfig.json
+node --test plugins/tariff-pulse/test/tariff.test.ts
 
 # загрузились ли оба плагина
-opencode api get '/api/plugin?location[directory]=.'
+opencode api get "/api/plugin?location[directory]=$PWD"
 
 # прямой вызов RPC
-opencode api post '/api/rpc/tariff_pulse/status?location[directory]=.' \
+opencode api post "/api/rpc/tariff_pulse/status?location[directory]=$PWD" \
   --data '{"input":{"providerID":"opencode-go","modelID":"deepseek-v4.1-flash"}}'
 ```
 

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-A repository of plugins for OpenCode V2. It currently contains two plugins: `plugins/tariff-pulse` and `plugins/usage-lens`. There is no build, test suite, linter or CI; type checking is optional and runs through a locally installed `typescript` — do not invent other commands.
+A repository of plugins for OpenCode V2. It currently contains two plugins: `plugins/tariff-pulse` and `plugins/usage-lens`. There is no build, linter or CI; type checking is optional and runs through a locally installed `typescript`. Unit tests cover the pure tariff logic and run on the built-in `node:test` runner (`node --test plugins/tariff-pulse/test/tariff.test.ts`) — do not add a test framework or invent other commands.
 
 ## Target version
 
@@ -23,7 +23,18 @@ A repository of plugins for OpenCode V2. It currently contains two plugins: `plu
 - Tracked config and plugins reload automatically. If changes are not picked up (local dependencies or directories outside watched paths) — `opencode service restart`, then `opencode service status`.
 - Load and hook errors: `~/.local/share/opencode/log/opencode.log`; for detail, run with `OPENCODE_LOG_LEVEL=DEBUG`.
 - Published packages are installed with `opencode plugin add <package>@<version>`; local ones only through `plugins` in the config. These plugins are not published yet.
-- There are no automated tests: verification means loading the plugin in OpenCode and calling its tool/hook manually. Do not add a test framework unless asked.
+- Automated tests cover only the pure tariff logic (`plugins/tariff-pulse/test/`). Everything else is verified by loading the plugin in OpenCode and calling its tool/hook manually. Do not add a test framework; extend the existing `node:test` file instead.
+
+## Tests
+
+Write tests for code that requires them:
+
+- Pure logic with branching, time and date math, pricing, scheduling, forecasting, parsing or normalization ships with tests. If a change touches such code, the change includes a test.
+- Skip tests where they add no signal: TUI layout, plugin wiring (`setup`, hooks, RPC registration) and thin adapters. Verify those by loading the plugin in OpenCode (see `CONTRIBUTING.md`).
+- Use the built-in `node:test` runner with native type stripping; do not add a framework or another runner.
+- Keep tests deterministic: fixed timestamps, explicit time zones, no dependence on the machine clock. The only exception is a deliberate canary, such as the bundled holiday calendar expiry check.
+- A bug in tested logic starts with a failing test. UI and wiring bugs are covered by the manual checklist.
+- `plugins/tariff-pulse/test/tariff.test.ts` is the reference for style and scope. New pure modules in `usage-lens` (`forecast.ts`, `budget.ts`) belong in `plugins/usage-lens/test/` in the same style.
 
 ## API pitfalls
 

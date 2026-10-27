@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `usage-lens`: snapshots are stored again — `usage_lens.ingest` was called without a location, so the server answered `rpc.unavailable` and the measured pace stayed empty.
 - `usage-lens`: the panel reloads on `credential.updated`, so the allowance appears right after `opencode auth login` instead of on the next poll.
 - `usage-lens`: a failed refresh can no longer leave the panel frozen — the busy flag is always released.
+- `tariff-pulse`: `/tier refresh` now syncs the calendar with the server — the `setHolidays` RPC was called without a location, so the server answered `rpc.unavailable` while the toast claimed success. A local-only update is now reported as a warning instead of a success.
 
 ## [0.1.0] - 2026-10-27
 

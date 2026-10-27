@@ -101,7 +101,7 @@ Snapshots are written at most every 5 minutes and capped at 2880 points (~10 day
 | `reset()` | clear history |
 
 ```sh
-opencode api post '/api/rpc/usage_lens/history?location[directory]=.' --data '{"input":{}}'
+opencode api post "/api/rpc/usage_lens/history?location[directory]=$PWD" --data '{"input":{}}'
 ```
 
 ## Limitations

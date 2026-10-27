@@ -190,19 +190,38 @@ export default Plugin.define({
           draft.retrievedAt = payload.retrievedAt ?? ""
         })
 
-        await context.client
-          .rpc(TariffRpc)
-          .setHolidays({
-            dates: [...payload.dates],
-            validUntil: payload.validUntil,
-            source: payload.source ?? url,
-          })
-          .catch(() => undefined)
+        // Plugin RPCs are scoped to a location: without one the server answers
+        // `rpc.unavailable` and the refreshed calendar never reaches it.
+        const directory = (context.location ?? context.data.location.default())?.directory
+        let syncError: string | null = directory ? null : "no location"
+        if (directory) {
+          try {
+            await context.client.rpc(TariffRpc).setHolidays(
+              {
+                dates: [...payload.dates],
+                validUntil: payload.validUntil,
+                source: payload.source ?? url,
+              },
+              { location: { directory } },
+            )
+          } catch (error) {
+            syncError = (error as Error).message
+          }
+        }
 
-        context.ui.toast.show({
-          message: `Holiday calendar updated: ${payload.dates.length} days`,
-          variant: "success",
-        })
+        // The badge reads the TUI copy, so a failed sync is not fatal — but do
+        // not report success when only the local calendar was updated.
+        context.ui.toast.show(
+          syncError
+            ? {
+                message: `Holiday calendar updated locally (${payload.dates.length} days); server sync failed: ${syncError}`,
+                variant: "warning",
+              }
+            : {
+                message: `Holiday calendar updated: ${payload.dates.length} days`,
+                variant: "success",
+              },
+        )
       } catch (error) {
         context.ui.toast.show({
           message: `Calendar refresh failed: ${(error as Error).message}`,

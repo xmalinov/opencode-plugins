@@ -35,8 +35,6 @@ export interface HolidayCalendar {
 export interface ModelTariff {
   readonly aliases?: readonly string[]
   readonly prices?: Readonly<Record<Tier, Price>>
-  /** Which tier the OpenCode model catalog price represents. */
-  readonly catalogIs?: Tier
 }
 
 export interface Tariff {
@@ -60,13 +58,6 @@ export interface TierState {
   readonly nextChangeAt: number | null
   readonly confidence: "exact" | "weekday-only"
   readonly prices?: Price
-}
-
-export interface CatalogPrice {
-  readonly input: number
-  readonly output: number
-  readonly cacheRead: number
-  readonly cacheWrite?: number
 }
 
 const MINUTE = 60_000
@@ -114,21 +105,6 @@ function inWindow(at: Date, window: PeakWindow): boolean {
     (window.days.includes(day) && minutes >= from) ||
     (window.days.includes((day + 6) % 7) && minutes < to)
   )
-}
-
-/** End of the window that currently contains `at`. */
-function windowEnd(at: Date, window: PeakWindow): number {
-  const now = at.getTime()
-  for (const offset of [-1, 0]) {
-    const base = dayStartUTC(at, offset)
-    if (!window.days.includes(new Date(base).getUTCDay())) continue
-    const from = clock(window.from)
-    const to = clock(window.to)
-    if (from === null || to === null) continue
-    const end = base + (to > from ? to : to + 1440) * MINUTE
-    if (end > now) return end
-  }
-  return now + DAY
 }
 
 export function hasFreshCalendar(calendar: HolidayCalendar | null | undefined, at: Date): boolean {
@@ -182,30 +158,6 @@ export function nextTierChange(now: Date, tariff: Tariff, current: Tier): number
   return null
 }
 
-function scale(price: CatalogPrice, factor: number): Price {
-  return {
-    input: price.input * factor,
-    output: price.output * factor,
-    cacheRead: price.cacheRead * factor,
-    ...(price.cacheWrite === undefined ? {} : { cacheWrite: price.cacheWrite * factor }),
-  }
-}
-
-function pricesFor(
-  model: ModelTariff,
-  tier: Tier,
-  tariff: Tariff,
-  catalog?: CatalogPrice,
-): Price | undefined {
-  if (model.prices) return model.prices[tier]
-  if (!catalog) return undefined
-  const base = model.catalogIs ?? "offPeak"
-  if (tier === base) return scale(catalog, 1)
-  return tier === "peak"
-    ? scale(catalog, tariff.peakMultiplier)
-    : scale(catalog, 1 / tariff.peakMultiplier)
-}
-
 export function findModel(tariff: Tariff, modelID: string): [string, ModelTariff] | null {
   const direct = tariff.models[modelID]
   if (direct) return [modelID, direct]
@@ -228,7 +180,6 @@ export function resolveTier(
   tariff: Tariff,
   providerID: string,
   modelID: string,
-  catalog?: CatalogPrice,
 ): TierState | null {
   if (!tariff.providers.includes(providerID)) return null
   const found = findModel(tariff, modelID)
@@ -248,7 +199,7 @@ export function resolveTier(
     reason,
     nextChangeAt: nextTierChange(at, tariff, tier),
     confidence: hasFreshCalendar(tariff.holidays, at) ? "exact" : "weekday-only",
-    prices: pricesFor(model, tier, tariff, catalog),
+    prices: model.prices?.[tier],
   }
 }
 
@@ -283,10 +234,4 @@ export function formatPrice(value: number): string {
   if (value === 0) return "0"
   if (value >= 1) return value.toFixed(2)
   return value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")
-}
-
-export function formatMoney(value: number): string {
-  if (!Number.isFinite(value)) return "—"
-  if (Math.abs(value) >= 100) return value.toFixed(0)
-  return value.toFixed(2)
 }

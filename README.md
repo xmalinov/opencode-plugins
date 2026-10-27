@@ -89,24 +89,26 @@ plugins/<name>/
   src/tui.tsx       # TUI entry
   src/rpc.ts        # RPC contract shared by both entries
   src/*.ts          # pure logic, no SDK imports
+  test/*.test.ts    # unit tests for the pure logic (tariff-pulse)
 ```
 
-Pure modules (`tariff.ts`, `forecast.ts`) have no SDK imports and can be exercised with plain Node.
+Pure modules (`tariff.ts`, `forecast.ts`) have no SDK imports and can be exercised with plain Node. The tariff clock is covered by unit tests on the built-in Node test runner.
 
 ## Development
 
-There is no build step, test suite, linter or CI. Local `.ts` plugins load directly.
+There is no build step, linter or CI. Local `.ts` plugins load directly. Tests use `node:test` and need a Node with native type stripping (`22.18+`, verified on `24`).
 
 ```sh
-# type-check (dev dependencies are installed, not committed)
-npm install --no-save typescript @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
+# type-check and unit tests (dev dependencies are installed, not committed)
+npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
 ./node_modules/.bin/tsc -p tsconfig.json
+node --test plugins/tariff-pulse/test/tariff.test.ts
 
 # confirm both plugins loaded
-opencode api get '/api/plugin?location[directory]=.'
+opencode api get "/api/plugin?location[directory]=$PWD"
 
 # call an RPC method directly
-opencode api post '/api/rpc/tariff_pulse/status?location[directory]=.' \
+opencode api post "/api/rpc/tariff_pulse/status?location[directory]=$PWD" \
   --data '{"input":{"providerID":"opencode-go","modelID":"deepseek-v4.1-flash"}}'
 ```
 

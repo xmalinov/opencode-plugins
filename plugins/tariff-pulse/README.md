@@ -66,7 +66,7 @@ OpenCode's model catalogue advertises the **off-peak** price, which is why the b
 | `setHolidays({ dates, validUntil, source? })` | store a refreshed calendar |
 
 ```sh
-opencode api post '/api/rpc/tariff_pulse/status?location[directory]=.' \
+opencode api post "/api/rpc/tariff_pulse/status?location[directory]=$PWD" \
   --data '{"input":{"providerID":"opencode-go","modelID":"deepseek-v4.1-flash"}}'
 ```
 
@@ -82,8 +82,9 @@ opencode api post '/api/rpc/tariff_pulse/status?location[directory]=.' \
 ## Development
 
 ```sh
-npm install --no-save typescript @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
+npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
 ./node_modules/.bin/tsc -p tsconfig.json
+node --test plugins/tariff-pulse/test/tariff.test.ts
 ```
 
-`src/tariff.ts` has no SDK imports and can be exercised with a plain Node script.
+`src/tariff.ts` has no SDK imports; `test/tariff.test.ts` covers it with the built-in Node test runner (Node `22.18+` for native type stripping, verified on `24`).
