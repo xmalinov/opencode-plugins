@@ -28,8 +28,6 @@ today $1.20 · 5 steps · 40k
 
 Nothing is sent anywhere.
 
-If `tariff-pulse` is installed, a tariff line is added at the top of the panel (`▲ PEAK ×2 · 1h 42m`). The link is optional: without it the line is hidden and the panel behaves normally.
-
 ## Commands
 
 - `/limits` — detailed panel: monthly limit, budgets, today, models, forecast.

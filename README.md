@@ -20,8 +20,6 @@ Both are read-only toward your data, ship no telemetry, and work independently.
 | [tariff-pulse](plugins/tariff-pulse/README.md) | DeepSeek peak/off-peak tariff: badge near the composer, full schedule page, countdown to the next price window | server + TUI + RPC | `/tier` |
 | [usage-lens](plugins/usage-lens/README.md) | Allowance and spend panel in the sidebar: Go allowance or Console budgets, pace, forecast, reset date, per-model split | server + TUI + RPC | `/limits` |
 
-`usage-lens` adds a tariff line to its panel only when `tariff-pulse` is installed. The dependency is optional and declared nowhere: the line is simply hidden otherwise.
-
 ### What it looks like
 
 ```

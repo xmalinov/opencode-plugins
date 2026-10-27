@@ -1,5 +1,4 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { Rpc } from "@opencode/plugin/rpc"
 import { createSignal } from "solid-js"
 import {
   DAY,
@@ -50,45 +49,6 @@ interface Projection {
   readonly projected: number
 }
 
-interface TariffInfo {
-  readonly tier: "peak" | "offPeak"
-  readonly nextChangeAt?: number
-  readonly peakMultiplier: number
-}
-
-/**
- * Mirrors the public method of `tariff.pulse`. Declared locally so this plugin
- * has no package dependency on the other one: absent, it simply hides the line.
- */
-const TariffStatus = Rpc.define({
-  id: "tariff_pulse",
-  methods: {
-    status: {
-      input: {
-        type: "object",
-        properties: {
-          providerID: { type: "string" },
-          modelID: { type: "string" },
-        },
-        required: ["providerID", "modelID"],
-        additionalProperties: false,
-      },
-      output: {
-        type: "object",
-        properties: {
-          matched: { type: "boolean" },
-          tier: { type: "string" },
-          nextChangeAt: { type: "number" },
-          peakMultiplier: { type: "number" },
-        },
-        required: ["matched"],
-        additionalProperties: true,
-      },
-    },
-  },
-  events: {},
-})
-
 export default Plugin.define({
   id: "usage.lens.cli",
   setup(context) {
@@ -102,7 +62,6 @@ export default Plugin.define({
     const [signedOut, setSignedOut] = createSignal(false)
     const [error, setError] = createSignal<string | null>(null)
     const [updatedAt, setUpdatedAt] = createSignal<number | null>(null)
-    const [tariffInfo, setTariffInfo] = createSignal<TariffInfo | null>(null)
     const [back, setBack] = createSignal<ReturnType<typeof context.ui.router.current> | null>(null)
     const [points, setPoints] = context.storage.store("points", {
       initial: { items: [] as UsagePoint[] },
@@ -119,31 +78,10 @@ export default Plugin.define({
 
     let busy = false
 
-    const loadTariff = async () => {
-      const model = context.ui.model.current()
-      if (!model) {
-        setTariffInfo(null)
-        return
-      }
-      try {
-        const result = (await context.client.rpc(TariffStatus).status({
-          providerID: model.providerID,
-          modelID: model.modelID,
-        })) as Record<string, unknown>
-        if (!result?.matched) {
-          setTariffInfo(null)
-          return
-        }
-        setTariffInfo({
-          tier: result.tier === "offPeak" ? "offPeak" : "peak",
-          nextChangeAt: typeof result.nextChangeAt === "number" ? result.nextChangeAt : undefined,
-          peakMultiplier:
-            typeof result.peakMultiplier === "number" ? result.peakMultiplier : 2,
-        })
-      } catch {
-        setTariffInfo(null)
-      }
-    }
+    // Plugin RPCs are scoped to a location: without one the server answers
+    // `rpc.unavailable` and every snapshot is discarded.
+    const rpcOptions = (directory: string | undefined) =>
+      directory ? { location: { directory } } : undefined
 
     const dayStart = () => {
       const start = new Date()
@@ -159,61 +97,65 @@ export default Plugin.define({
     const refresh = async () => {
       if (busy) return
       busy = true
-      void loadTariff()
-
       const location = context.location ?? context.data.location.default()
-      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-      const now = Date.now()
+      const directory = location?.directory
+      try {
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        const now = Date.now()
 
-      const [limitResult, statsResult, monthResult] = await Promise.allSettled([
-        context.client.usage.limits({ location: { directory: location.directory } }),
-        context.client.session.stats({
-          from: dayStart(),
-          to: now,
-          timezone,
-          tools: "none",
-        }),
-        context.client.session.stats({
-          from: monthStart(),
-          to: now,
-          timezone,
-          tools: "none",
-        }),
-      ])
+        const [limitResult, statsResult, monthResult] = await Promise.allSettled([
+          context.client.usage.limits({ location: { directory: location.directory } }),
+          context.client.session.stats({
+            from: dayStart(),
+            to: now,
+            timezone,
+            tools: "none",
+          }),
+          context.client.session.stats({
+            from: monthStart(),
+            to: now,
+            timezone,
+            tools: "none",
+          }),
+        ])
 
-      if (limitResult.status === "fulfilled") {
-        const data = (limitResult.value.data ?? null) as Limits | null
-        setSignedOut(data === null)
-        setLimits(data)
-        setError(null)
-        setUpdatedAt(Date.now())
+        if (limitResult.status === "fulfilled") {
+          const data = (limitResult.value.data ?? null) as Limits | null
+          setSignedOut(data === null)
+          setLimits(data)
+          setError(null)
+          setUpdatedAt(Date.now())
 
-        if (data?.go) {
-          const point: UsagePoint = {
-            t: Date.now(),
-            monthly: data.go.monthly.percent,
-            weekly: data.go.weekly.percent,
-            rolling: data.go.rolling.percent,
+          if (data?.go) {
+            const point: UsagePoint = {
+              t: Date.now(),
+              monthly: data.go.monthly.percent,
+              weekly: data.go.weekly.percent,
+              rolling: data.go.rolling.percent,
+            }
+            const last = points.items[points.items.length - 1]
+            if (!last || point.t - last.t >= 5 * 60_000) {
+              await setPoints((draft) => {
+                draft.items = pushPoint(draft.items, point)
+              })
+              void context.client
+                .rpc(UsageRpc)
+                .ingest({ point }, rpcOptions(directory))
+                .catch(() => undefined)
+            }
           }
-          const last = points.items[points.items.length - 1]
-          if (!last || point.t - last.t >= 5 * 60_000) {
-            await setPoints((draft) => {
-              draft.items = pushPoint(draft.items, point)
-            })
-            void context.client
-              .rpc(UsageRpc)
-              .ingest({ point })
-              .catch(() => undefined)
-          }
+        } else {
+          setError(
+            limitResult.reason instanceof Error ? limitResult.reason.message : "usage API failed",
+          )
         }
-      } else {
-        setError(limitResult.reason instanceof Error ? limitResult.reason.message : "usage API failed")
+
+        if (statsResult.status === "fulfilled") setStats(statsResult.value as Stats)
+        if (monthResult.status === "fulfilled") setMonth(monthResult.value as Stats)
+      } finally {
+        // A rejected call or a storage write must not freeze the panel forever.
+        busy = false
       }
-
-      if (statsResult.status === "fulfilled") setStats(statsResult.value as Stats)
-      if (monthResult.status === "fulfilled") setMonth(monthResult.value as Stats)
-
-      busy = false
     }
 
     const monthly = () => limits()?.go?.monthly.percent ?? null
@@ -322,20 +264,6 @@ export default Plugin.define({
       return base
     }
 
-    const tariffLine = () => {
-      const info = tariffInfo()
-      if (!info) return ""
-      const glyph = info.tier === "offPeak" ? "▼" : "▲"
-      const label = info.tier === "offPeak" ? "OFF −50%" : `PEAK ×${info.peakMultiplier}`
-      const countdown = info.nextChangeAt
-        ? ` · ${formatSpan(info.nextChangeAt - Date.now())}`
-        : ""
-      return `${glyph} ${label}${countdown}`
-    }
-
-    const tariffColor = () =>
-      tariffInfo()?.tier === "offPeak" ? feedback.success : muted
-
     const plan = () =>
       planLabel ??
       (limits()?.go ? "Go" : budgets().length > 0 ? "Console" : "no plan limits")
@@ -359,16 +287,13 @@ export default Plugin.define({
       if (compact) {
         return (
           <text fg={summaryColor()}>
-            {`usage ${hasLimits() ? meterLine() : "—"}${resetLine() ? ` · ${resetLine()}` : ""}${
-              tariffLine() ? ` · ${tariffLine()}` : ""
-            }`}
+            {`usage ${hasLimits() ? meterLine() : "—"}${resetLine() ? ` · ${resetLine()}` : ""}`}
           </text>
         )
       }
 
       return (
         <box flexDirection="column">
-          {tariffInfo() ? <text fg={tariffColor()}>{tariffLine()}</text> : null}
           <text fg={muted}>usage · {planLine()}</text>
           {hasLimits() ? <text fg={summaryColor()}>{meterLine()}</text> : null}
           {paceLine() ? <text fg={paceColor()}>{paceLine()}</text> : null}
@@ -420,7 +345,6 @@ export default Plugin.define({
       const lines: string[] = []
       lines.push(`workspace  ${data.workspace.name ?? data.workspace.id}`)
       lines.push(`plan       ${plan()}`)
-      if (tariffInfo()) lines.push(`tariff     ${tariffLine()}`)
       lines.push("")
 
       if (data.go) {
@@ -617,12 +541,18 @@ export default Plugin.define({
     const stop = context.data.on("session.execution.succeeded", () => {
       void refresh()
     })
+    // `opencode auth login` happens outside the panel; reload instead of
+    // waiting for the next poll so the allowance appears right away.
+    const stopCredential = context.data.on("credential.updated", () => {
+      void refresh()
+    })
     const timer = setInterval(() => void refresh(), 60_000)
     void refresh()
 
     return () => {
       clearInterval(timer)
       stop()
+      stopCredential()
       unregisterSlot()
       unregisterRoute()
     }

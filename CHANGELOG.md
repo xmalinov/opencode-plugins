@@ -14,9 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `/limits` lists every budget with coverage, scope, remaining amount, reset and per-model spend.
   - The primary budget is the one picked in the Console, then one covering the selected model, then the first one.
 
+### Removed
+
+- `usage-lens`: the peak/off-peak line and the `tariff_pulse.status` call. `tariff-pulse` already shows the same badge near the composer, so the sidebar copy was duplication, and the line never appeared anyway because plugin RPC calls need a location. The panel no longer knows about the other plugin.
+
 ### Fixed
 
 - `usage-lens`: an empty compact meter is no longer colored as a healthy limit.
+- `usage-lens`: snapshots are stored again — `usage_lens.ingest` was called without a location, so the server answered `rpc.unavailable` and the measured pace stayed empty.
+- `usage-lens`: the panel reloads on `credential.updated`, so the allowance appears right after `opencode auth login` instead of on the next poll.
+- `usage-lens`: a failed refresh can no longer leave the panel frozen — the busy flag is always released.
 
 ## [0.1.0] - 2026-10-27
 
