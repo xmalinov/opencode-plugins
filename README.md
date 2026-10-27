@@ -43,7 +43,7 @@ today $3.42 · 14 steps · 150k
 ## Requirements
 
 - **OpenCode V2** — developed and verified against `2.2.0`. V1 plugins use a different API and are not compatible.
-- `tariff-pulse` needs a DeepSeek-backed provider (`deepseek` or `opencode-go` by default).
+- `tariff-pulse` needs a DeepSeek-backed provider (`deepseek` or `opencode-go` by default; `-free` model variants are not matched, since they have no per-token price).
 - `usage-lens` needs a signed-in OpenCode Console session; without it the panel shows `not connected` instead of failing. A Go subscription is optional: without it Console budgets act as the limit.
 
 ## Installation

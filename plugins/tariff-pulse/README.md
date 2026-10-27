@@ -76,6 +76,8 @@ opencode api post '/api/rpc/tariff_pulse/status?location[directory]=.' \
 - If the holiday calendar is stale, the badge shows `▲?` instead of claiming peak. A false peak is worse than no hint.
 - Prices are baked into plugin data. When the price list changes, update `src/data.ts` — the source and date are recorded there.
 - `opencode-go` is confirmed: its price list has both Off-Peak and Peak rows.
+- Free model variants are not matched on purpose: a `-free` model has no per-token price, so a peak multiplier would misrepresent its cost. Aliases name paid models only.
+- The provider list comes from `options.providers`, and OpenCode passes options only in the object form of the plugin entry. A plain string entry (`"./plugins/tariff-pulse"`) silently gets the defaults `["deepseek", "opencode-go"]`.
 
 ## Development
 
