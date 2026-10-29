@@ -74,6 +74,40 @@ export function forecast(points: readonly UsagePoint[], windowMs = 7 * DAY): For
   }
 }
 
+/**
+ * The panel's facts as text for the agent. Only the TUI records readings, so the
+ * age of the last one is part of the answer.
+ */
+export function usageText(points: readonly UsagePoint[], now: number): string {
+  const last = points[points.length - 1]
+  if (!last) {
+    return "No readings yet: open /limits in the TUI once so the panel records one."
+  }
+
+  const age = now - last.t
+  const lines = [
+    `monthly ${Math.round(last.monthly)}% · weekly ${Math.round(last.weekly)}% · rolling 5h ${Math.round(last.rolling)}%`,
+    age < 60_000
+      ? "last reading just now"
+      : `last reading ${formatSpan(age)} ago, recorded while the panel was open`,
+  ]
+
+  const result = forecast(points)
+  if (!result) {
+    lines.push("rate: not enough history yet")
+  } else if (result.ratePerHour <= 0) {
+    lines.push(`rate: no change over ${Math.round(result.spanHours)}h (${result.points} points)`)
+  } else {
+    lines.push(
+      `rate: ${result.ratePerHour.toFixed(2)}%/h over ${Math.round(result.spanHours)}h (${result.points} points)`,
+    )
+    if (result.etaDays !== null) {
+      lines.push(`limit: in ~${Math.round(result.etaDays)} days at this rate`)
+    }
+  }
+  return lines.join("\n")
+}
+
 function daysInMonth(year: number, monthIndex: number): number {
   return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
 }
