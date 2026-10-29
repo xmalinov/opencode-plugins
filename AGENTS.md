@@ -1,6 +1,6 @@
 # AGENTS.md
 
-A repository of plugins for OpenCode V2. It currently contains two plugins: `plugins/tariff-pulse` and `plugins/usage-lens`. There is no build, linter or CI; type checking is optional and runs through a locally installed `typescript`. Unit tests cover the pure tariff logic and run on the built-in `node:test` runner (`node --test plugins/tariff-pulse/test/tariff.test.ts`) — do not add a test framework or invent other commands.
+A repository of plugins for OpenCode V2. It currently contains two plugins: `plugins/tariff-pulse` and `plugins/usage-lens`. There is no build, linter or CI. Dev dependencies live in the root `package.json`: `npm run check` type-checks every plugin and `npm test` runs the unit tests on the built-in `node:test` runner — do not add a test framework or invent other commands.
 
 ## Target version
 
@@ -20,10 +20,11 @@ A repository of plugins for OpenCode V2. It currently contains two plugins: `plu
 ## Checking
 
 - Local `.ts` plugins load without a build.
+- `npm run check` type-checks everything (`tsc`, `noUnusedLocals` on). `npm test` runs the unit tests.
 - Tracked config and plugins reload automatically. If changes are not picked up (local dependencies or directories outside watched paths) — `opencode service restart`, then `opencode service status`.
 - Load and hook errors: `~/.local/share/opencode/log/opencode.log`; for detail, run with `OPENCODE_LOG_LEVEL=DEBUG`.
 - Published packages are installed with `opencode plugin add <package>@<version>`; local ones only through `plugins` in the config. These plugins are not published yet.
-- Automated tests cover only the pure tariff logic (`plugins/tariff-pulse/test/`). Everything else is verified by loading the plugin in OpenCode and calling its tool/hook manually. Do not add a test framework; extend the existing `node:test` file instead.
+- Automated tests cover only the pure tariff logic (`plugins/tariff-pulse/test/`). Everything else is verified by loading the plugin in OpenCode and calling its tool/hook manually. Do not add a test framework; extend the existing `node:test` files instead (`npm test` picks up `plugins/*/test/*.test.ts`).
 
 ## Tests
 
@@ -50,7 +51,7 @@ Write tests for code that requires them:
 - Documentation is English-first. `README.md` is the primary README, `README.ru.md` is its Russian mirror; keep both in sync, including the per-plugin READMEs when user-visible behavior changes.
 - Update `CHANGELOG.md` under `Unreleased` for user-visible changes.
 - Do not commit `docs/` — it holds personal research notes and is excluded locally through `.git/info/exclude`.
-- Never send user data off the machine: both plugins read local OpenCode APIs only.
+- Never send user data off the machine: both plugins read local OpenCode APIs only. The single exception is the tariff holiday calendar, a plain GET to the configured `holidayURL` that carries the year and nothing else; it runs on `/tier refresh` and, unless `autoHolidays` is `false`, once at launch while the stored calendar is stale.
 - Keep pure logic (scheduling, pricing, forecasting) in modules without SDK imports so it can run under plain Node.
 
 ## Git

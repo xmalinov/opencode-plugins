@@ -78,7 +78,7 @@ opencode service status
 
 **tariff-pulse** encodes the DeepSeek schedule (peak `01:00–04:00` and `06:00–10:00` UTC, Mon–Fri; PRC holidays are off-peak all day) and the price table for the models it knows. Off-peak is exactly half of peak. The model catalogue in OpenCode lists the **off-peak** price, so the badge matters: during peak the real cost is twice what the model picker shows. When the bundled holiday calendar expires, the badge degrades to `▲?` instead of claiming peak.
 
-**usage-lens** reads `GET /api/experimental/usage/limits` for Go allowance and Console budgets, and `GET /api/experimental/session/stats` for today's spend, tokens and per-model split. A Go allowance is shown when the subscription is active; otherwise the workspace's Console budgets act as the limit (percent, spent/limit, reset and per-model split). It stores percentage snapshots locally to compute a measured pace, and projects the monthly limit linearly toward `resetsAt` the same way the Console does. Errors are contained: the panel shows `usage unavailable` rather than breaking the session.
+**usage-lens** reads `GET /api/experimental/usage/limits` for Go allowance and Console budgets, and `GET /api/experimental/session/stats` for today's spend, tokens and per-model split. A Go allowance is shown when the subscription is active; otherwise the workspace's Console budgets act as the limit (percent, spent/limit, reset and per-model split). It stores percentage snapshots locally to compute a measured pace, and projects the monthly limit linearly toward `resetsAt` the same way the Console does. Errors are contained: calls time out, and a failed refresh keeps the last good numbers with a `stale` marker and the reason instead of breaking the session.
 
 ## Repository layout
 
@@ -99,10 +99,10 @@ Pure modules (`tariff.ts`, `forecast.ts`) have no SDK imports and can be exercis
 There is no build step, linter or CI. Local `.ts` plugins load directly. Tests use `node:test` and need a Node with native type stripping (`22.18+`, verified on `24`).
 
 ```sh
-# type-check and unit tests (dev dependencies are installed, not committed)
-npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
-./node_modules/.bin/tsc -p tsconfig.json
-node --test plugins/tariff-pulse/test/tariff.test.ts
+# type-check and unit tests (dev dependencies live in the root package.json)
+npm install
+npm run check
+npm test
 
 # confirm both plugins loaded
 opencode api get "/api/plugin?location[directory]=$PWD"

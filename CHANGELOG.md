@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `tariff-pulse`: a stale holiday calendar is refreshed in the background at launch (`autoHolidays`, on by default). Without it the badge stayed at `▲?` after the bundled calendar expired until someone ran `/tier refresh`; the request is made only while the stored calendar is stale, and a background failure goes to the log instead of a toast.
 - `usage-lens`: Console budgets act as the limit when there is no Go or Go Plus subscription.
   - Sidebar shows the budget percentage, bar, spent/limit and reset date.
   - `/limits` lists every budget with coverage, scope, remaining amount, reset and per-model spend.
@@ -18,8 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `usage-lens`: the peak/off-peak line and the `tariff_pulse.status` call. `tariff-pulse` already shows the same badge near the composer, so the sidebar copy was duplication, and the line never appeared anyway because plugin RPC calls need a location. The panel no longer knows about the other plugin.
 
+### Changed
+
+- `tariff-pulse`: model ids are matched by a normalized key — case, punctuation and a snapshot suffix (`deepseek-flash-1017` is `deepseek-flash`) are folded, so a new DeepSeek snapshot resolves without adding an alias. Labels are not folded: `-free` stays a different model.
+- Repository: dev dependencies moved to a root `package.json`; `npm run check` type-checks every plugin (`noUnusedLocals` on) and `npm test` runs the unit tests. Two dead imports in `usage-lens` were removed by the new check.
+
 ### Fixed
 
+- `usage-lens`: a failed refresh no longer blanks the panel — the last good numbers stay, with the reason under them and a `stale` line once the reading is older than 5 minutes (`/limits` says the same). Before the first successful read the panel still shows `usage unavailable`.
+- `usage-lens`: the panel no longer freezes when a request hangs — the limits and stats calls time out after 15 seconds and release the busy flag.
+- `usage-lens` and `tariff-pulse`: semantic colours come from the first theme token that exists (`text.feedback.*` → syntax/diff hues) with hex fallbacks, so a theme without the feedback tokens no longer breaks the TUI half.
+- `tariff-pulse`: `/tier refresh` always answers — the calendar fetch gives up after 10 seconds and the `setHolidays` sync after 15, so the toast appears instead of nothing.
 - `usage-lens`: an empty compact meter is no longer colored as a healthy limit.
 - `usage-lens`: snapshots are stored again — `usage_lens.ingest` was called without a location, so the server answered `rpc.unavailable` and the measured pace stayed empty.
 - `usage-lens`: the panel reloads on `credential.updated`, so the allowance appears right after `opencode auth login` instead of on the next poll.
