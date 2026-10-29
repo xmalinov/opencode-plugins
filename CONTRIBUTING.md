@@ -5,7 +5,7 @@ Thanks for taking the time to improve these plugins. Issues and pull requests ar
 ## Before you start
 
 - This repository targets **OpenCode V2** (`2.2.0` at the time of writing). V1 plugin APIs are out of scope.
-- There is no build step, linter or CI. Pure logic is covered by the built-in `node:test` runner (`plugins/tariff-pulse/test/`). Do not add a test framework or another runner unless the maintainer agrees in the issue first.
+- There is no build step, linter or CI. Pure logic is covered by the built-in `node:test` runner (`plugins/*/test/`). Do not add a test framework or another runner unless the maintainer agrees in the issue first.
 - Keep pull requests focused: one plugin or one concern per PR.
 
 ## Getting set up
@@ -26,7 +26,7 @@ npm run check
 
 `tsc` runs with `noEmit`; there is no artifact to publish from this repository. Each plugin's `src/index.ts` is loaded as-is by OpenCode.
 
-Unit tests cover the tariff clock and its bundled data (`plugins/tariff-pulse/test/tariff.test.ts`). They use the built-in Node runner, so no test dependency is installed:
+Unit tests cover the pure modules: the tariff clock and its bundled data, the error phrases, the forecast text and the `/limits` page. They use the built-in Node runner, so no test dependency is installed:
 
 ```sh
 npm test
@@ -70,6 +70,8 @@ opencode api post "/api/rpc/tariff_pulse/schedule?location[directory]=$PWD" --da
 # usage-lens
 opencode api post "/api/rpc/usage_lens/history?location[directory]=$PWD" --data '{"input":{}}'
 ```
+
+Ask the agent to call `tariff.status` and `usage.forecast`, or call them directly from a session, and check that the answer names the tier and the age of the last usage reading.
 
 In the TUI, check `/tier` and `/limits`, plus at least one option you touched (`compact`, `slot`, `providers`, `nearChangeMinutes`).
 

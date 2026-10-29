@@ -20,6 +20,8 @@ Both are read-only toward your data, ship no telemetry, and work independently.
 | [tariff-pulse](plugins/tariff-pulse/README.md) | DeepSeek peak/off-peak tariff: badge near the composer, full schedule page, countdown to the next price window | server + TUI + RPC | `/tier` |
 | [usage-lens](plugins/usage-lens/README.md) | Allowance and spend panel in the sidebar: Go allowance or Console budgets, pace, forecast, reset date, per-model split | server + TUI + RPC | `/limits` |
 
+Both plugins also give the agent a tool — `tariff.status` and `usage.forecast` — so it can answer the same questions ("is it peak now?", "how fast is the allowance going?") without opening a panel. Neither tool makes a network request.
+
 ### What it looks like
 
 ```
@@ -89,10 +91,10 @@ plugins/<name>/
   src/tui.tsx       # TUI entry
   src/rpc.ts        # RPC contract shared by both entries
   src/*.ts          # pure logic, no SDK imports
-  test/*.test.ts    # unit tests for the pure logic (tariff-pulse)
+  test/*.test.ts    # unit tests for the pure logic
 ```
 
-Pure modules (`tariff.ts`, `forecast.ts`) have no SDK imports and can be exercised with plain Node. The tariff clock is covered by unit tests on the built-in Node test runner.
+Pure modules (`tariff.ts`, `forecast.ts`, `budget.ts`, `view.ts`) have no SDK imports and can be exercised with plain Node. The tariff clock, the error phrases, the forecast text and the `/limits` page are covered by unit tests on the built-in Node test runner.
 
 ## Development
 

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `tariff-pulse` and `usage-lens`: the agent can answer the panels' questions itself.
+  - `tariff.status` reports the tier, the reason, the time to the next change, the prices on both sides of it and the weekly schedule. It uses the session's model unless `providerID`/`modelID` are given.
+  - `usage.forecast` reports the monthly, weekly and 5-hour percentages of the last reading, the measured rate and the time to the limit, and says how old the reading is — only the panel records readings.
+  - Both read what the panel already has: neither makes a new request.
 - `tariff-pulse`: a stale holiday calendar is refreshed in the background at launch (`autoHolidays`, on by default). Without it the badge stayed at `▲?` after the bundled calendar expired until someone ran `/tier refresh`; the request is made only while the stored calendar is stale, and a background failure goes to the log instead of a toast.
 - `usage-lens`: Console budgets act as the limit when there is no Go or Go Plus subscription.
   - Sidebar shows the budget percentage, bar, spent/limit and reset date.
@@ -27,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `usage-lens`: a failed refresh no longer blanks the panel — the last good numbers stay, with the reason under them and a `stale` line once the reading is older than 5 minutes (`/limits` says the same). Before the first successful read the panel still shows `usage unavailable`.
+- `tariff-pulse` and `usage-lens`: a failed request now says what happened — `sign in again (401)`, `rate limited (429)`, `timed out`, `network error` — instead of the raw message, and a long API body is cut to one line.
 - `usage-lens`: the panel no longer freezes when a request hangs — the limits and stats calls time out after 15 seconds and release the busy flag.
 - `usage-lens` and `tariff-pulse`: semantic colours come from the first theme token that exists (`text.feedback.*` → syntax/diff hues) with hex fallbacks, so a theme without the feedback tokens no longer breaks the TUI half.
 - `tariff-pulse`: `/tier refresh` always answers — the calendar fetch gives up after 10 seconds and the `setHolidays` sync after 15, so the toast appears instead of nothing.

@@ -34,6 +34,10 @@ OpenCode's model catalogue advertises the **off-peak** price, which is why the b
 
 A stale holiday calendar is refreshed in the background at launch, without a toast: the badge would otherwise stay at `▲?` until someone remembered `/tier refresh`. The request is made only while the stored calendar is stale.
 
+## Agent tools
+
+`tariff.status` gives the same facts to the agent — tier, reason, countdown, prices on both sides of the next change, schedule — so it can answer "send it now or wait" without opening `/tier`. The session's model is used unless `providerID`/`modelID` are passed. It reads local data only: no request, no cost.
+
 ## Installation
 
 ```jsonc title="opencode.jsonc"

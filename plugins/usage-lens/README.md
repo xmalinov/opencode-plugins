@@ -92,6 +92,10 @@ Without a Go plan, `on pace $42/mo` is derived from local spend this month; the 
 
 Snapshots are written at most every 5 minutes and capped at 2880 points (~10 days).
 
+## Agent tools
+
+`usage.forecast` gives the agent the last reading's monthly, weekly and 5-hour percentages, the measured rate and the time to the limit. Only the panel records readings, so the answer always says how old the last one is; with no history it says how to make one. It reads the stored snapshots — no API call, no cost.
+
 ## RPC
 
 | Method | Purpose |
