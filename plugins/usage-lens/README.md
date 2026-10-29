@@ -108,15 +108,16 @@ opencode api post "/api/rpc/usage_lens/history?location[directory]=$PWD" --data 
 
 - **The API has no next billing date for the subscription.** The panel shows "limit resets in N days" from `resetsAt`; that is not the payment date.
 - Console credit balance is not exposed — only `spent`/`limit` per budget.
-- `experimental.*` may change. Every call is isolated: on error the panel shows `usage unavailable` instead of breaking.
+- `experimental.*` may change. Every call is isolated and times out after 15 seconds; a failed refresh keeps the last good numbers on screen, marks them `stale` after 5 minutes and prints the reason. Before the first successful read the panel shows `usage unavailable`.
 - If the Console session is not signed in, `data` is `null` → `not connected`.
 - Limit percentages and dollars are different quantities; the panel labels them separately.
 
 ## Development
 
 ```sh
-npm install --no-save typescript @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
-./node_modules/.bin/tsc -p tsconfig.json
+npm install
+npm run check
+npm test
 ```
 
 `src/forecast.ts` has no SDK imports and can be run with a plain Node script.

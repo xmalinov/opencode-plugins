@@ -10,9 +10,7 @@ import {
   formatSpan,
   formatTokens,
   meterColor,
-  modelShares,
   pushPoint,
-  sparkline,
   type UsagePoint,
 } from "./forecast.js"
 import { budgetBasis, budgetLabel, budgetPercent, pickBudget, type Budget } from "./budget.js"
@@ -49,6 +47,36 @@ interface Projection {
   readonly projected: number
 }
 
+/** A stalled call must not leave the panel on old numbers for ever. */
+const RPC_TIMEOUT_MS = 15_000
+
+/** A reading older than a few polls is not fresh, and the panel says so. */
+const STALE_MS = 5 * 60_000
+
+/** Used only when the active theme defines none of the semantic tokens. */
+const FALLBACK_GREEN = "#3fb950"
+const FALLBACK_YELLOW = "#d29922"
+const FALLBACK_RED = "#f85149"
+
+function withTimeout<T>(promise: Promise<T>, ms = RPC_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) =>
+      setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms),
+    ),
+  ])
+}
+
+/** First path the theme actually defines: a theme is not required to carry the feedback tokens. */
+function themeColour(theme: any, ...paths: string[][]): any {
+  for (const path of paths) {
+    let node: any = theme
+    for (const key of path) node = node?.[key]
+    if (node !== undefined && node !== null) return node
+  }
+  return undefined
+}
+
 export default Plugin.define({
   id: "usage.lens.cli",
   setup(context) {
@@ -71,9 +99,15 @@ export default Plugin.define({
     const muted = theme.text.muted
     const base = theme.text.base
     const feedback = {
-      success: theme.text.feedback.success.base,
-      warning: theme.text.feedback.warning.base,
-      error: theme.text.feedback.error.base,
+      success:
+        themeColour(theme, ["text", "feedback", "success", "base"], ["syntax", "string"], ["diff", "text", "added"]) ??
+        FALLBACK_GREEN,
+      warning:
+        themeColour(theme, ["text", "feedback", "warning", "base"], ["syntax", "type"], ["syntax", "number"]) ??
+        FALLBACK_YELLOW,
+      error:
+        themeColour(theme, ["diff", "text", "removed"], ["syntax", "keyword"], ["text", "feedback", "error", "base"]) ??
+        FALLBACK_RED,
     }
 
     let busy = false
@@ -104,19 +138,23 @@ export default Plugin.define({
         const now = Date.now()
 
         const [limitResult, statsResult, monthResult] = await Promise.allSettled([
-          context.client.usage.limits({ location: { directory: location.directory } }),
-          context.client.session.stats({
-            from: dayStart(),
-            to: now,
-            timezone,
-            tools: "none",
-          }),
-          context.client.session.stats({
-            from: monthStart(),
-            to: now,
-            timezone,
-            tools: "none",
-          }),
+          withTimeout(context.client.usage.limits({ location: { directory: location.directory } })),
+          withTimeout(
+            context.client.session.stats({
+              from: dayStart(),
+              to: now,
+              timezone,
+              tools: "none",
+            }),
+          ),
+          withTimeout(
+            context.client.session.stats({
+              from: monthStart(),
+              to: now,
+              timezone,
+              tools: "none",
+            }),
+          ),
         ])
 
         if (limitResult.status === "fulfilled") {
@@ -279,15 +317,46 @@ export default Plugin.define({
       return percent === null ? muted : feedback[meterColor(percent)]
     }
 
+    const staleAge = () => {
+      const at = updatedAt()
+      if (at === null) return null
+      const age = Date.now() - at
+      return age > STALE_MS ? age : null
+    }
+
+    /** Only when the data is old: a permanent row for the clock would cost more than it explains. */
+    const staleLine = () => {
+      const age = staleAge()
+      const at = updatedAt()
+      if (age === null || at === null) return ""
+      return `stale ${formatSpan(age)} · last read ${new Date(at).toLocaleTimeString()}`
+    }
+
     const summary = () => {
-      if (error()) return <text fg={feedback.warning}>usage unavailable</text>
-      if (signedOut()) return <text fg={muted}>usage · not connected</text>
-      if (!limits()) return <text fg={muted}>usage · loading…</text>
+      // A signed-out read that later failed is a failure, not the old "not connected".
+      if (signedOut() && !error()) return <text fg={muted}>usage · not connected</text>
+      if (!limits()) {
+        return error() ? (
+          <text fg={feedback.warning}>
+            {compact ? "usage unavailable" : `usage unavailable · ${error()}`}
+          </text>
+        ) : (
+          <text fg={muted}>usage · loading…</text>
+        )
+      }
+
+      // The last good reading stays on screen when a refresh fails: a blank panel
+      // hides exactly what the user opened it for. The failure and the age of the
+      // data are printed under the numbers instead.
+      const trouble = error() ? <text fg={feedback.warning}>{error()}</text> : null
+      const stale = staleLine() ? <text fg={feedback.warning}>{staleLine()}</text> : null
 
       if (compact) {
         return (
-          <text fg={summaryColor()}>
-            {`usage ${hasLimits() ? meterLine() : "—"}${resetLine() ? ` · ${resetLine()}` : ""}`}
+          <text fg={error() || staleAge() !== null ? feedback.warning : summaryColor()}>
+            {`usage ${hasLimits() ? meterLine() : "—"}${resetLine() ? ` · ${resetLine()}` : ""}${
+              staleAge() !== null ? " · stale" : ""
+            }`}
           </text>
         )
       }
@@ -299,6 +368,8 @@ export default Plugin.define({
           {paceLine() ? <text fg={paceColor()}>{paceLine()}</text> : null}
           {resetLine() ? <text fg={muted}>{resetLine()}</text> : null}
           <text fg={base}>{todayLine()}</text>
+          {stale}
+          {trouble}
         </box>
       )
     }
@@ -322,7 +393,7 @@ export default Plugin.define({
 
     const detail = () => {
       const data = limits()
-      if (error()) {
+      if (error() && !data) {
         return (
           <box flexDirection="column">
             <text fg={feedback.warning}>Usage API is unavailable</text>
@@ -474,6 +545,13 @@ export default Plugin.define({
       if (monthValue) lines.push(`  month    $${formatMoney(monthValue.cost)} so far`)
 
       lines.push("")
+      // The data above is kept from the last successful read; say that it is old
+      // and why, instead of pretending the failure did not happen.
+      if (error()) {
+        lines.push(`refresh failed: ${error()}`)
+      }
+      const stale = staleAge()
+      if (stale !== null) lines.push(`stale ${formatSpan(stale)} — numbers are from the last good read`)
       const updated = updatedAt()
       lines.push(
         `${updated ? new Date(updated).toLocaleTimeString() : "—"} · ${data.workspace.usageURL}`,
