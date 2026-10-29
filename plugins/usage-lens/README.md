@@ -64,7 +64,7 @@ Nothing is sent anywhere.
 projected = percent × (resetsAt − start) / (now − start)
 ```
 
-The line appears once the period is at least a day old and spend is non-zero; at the limit it is replaced by `monthly limit reached` (Go) or `budget reached` (Console budgets). The API returns an integer percentage, so early in the period the value can differ from the dashboard by 1–2 pp.
+The line follows the Console while the period is at least a day old. On the first day the Console hides the forecast; the panel falls back to the measured rate so the row does not vanish. When neither is available it shows `on pace —`. At the limit the line is replaced by `monthly limit reached` (Go) or `budget reached` (Console budgets). The API returns an integer percentage, so early in the period the value can differ from the dashboard by 1–2 pp.
 
 The `/limits` panel also computes a **measured** pace from snapshots — recent speed rather than the period average:
 
@@ -94,7 +94,13 @@ Snapshots are written at most every 5 minutes and capped at 2880 points (~10 day
 
 ## Agent tools
 
-`usage.forecast` gives the agent the last reading's monthly, weekly and 5-hour percentages, the measured rate and the time to the limit. Only the panel records readings, so the answer always says how old the last one is; with no history it says how to make one. It reads the stored snapshots — no API call, no cost.
+`usage.forecast` gives the agent the last reading's monthly, weekly and 5-hour percentages, the measured rate and the time to the limit. Only the panel records readings, so the answer always says how old the last one is; with no history it says how to make one. It reads the stored snapshots — no API call.
+
+## Cost
+
+The `/limits` page makes three local API calls a minute while it is open: no model tokens.
+
+`usage.forecast` adds about 76 tokens of tool schema to every request and costs one model request per call. The answer is about 40 tokens. With no history it answers "No readings yet" — the call buys nothing then.
 
 ## RPC
 

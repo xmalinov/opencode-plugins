@@ -25,11 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Docs: both plugin READMEs now state what the agent tools cost — about 210 tokens of tool schema per request and one model request per call — instead of calling them free.
 - `tariff-pulse`: model ids are matched by a normalized key — case, punctuation and a snapshot suffix (`deepseek-flash-1017` is `deepseek-flash`) are folded, so a new DeepSeek snapshot resolves without adding an alias. Labels are not folded: `-free` stays a different model.
 - Repository: dev dependencies moved to a root `package.json`; `npm run check` type-checks every plugin (`noUnusedLocals` on) and `npm test` runs the unit tests. Two dead imports in `usage-lens` were removed by the new check.
 
 ### Fixed
 
+- `usage-lens`: `on pace` no longer disappears on the first day of a Go cycle — the Console hides its forecast there, so the panel falls back to the measured rate and shows `on pace —` when there is not enough data.
 - `usage-lens`: a failed refresh no longer blanks the panel — the last good numbers stay, with the reason under them and a `stale` line once the reading is older than 5 minutes (`/limits` says the same). Before the first successful read the panel still shows `usage unavailable`.
 - `tariff-pulse` and `usage-lens`: a failed request now says what happened — `sign in again (401)`, `rate limited (429)`, `timed out`, `network error` — instead of the raw message, and a long API body is cut to one line.
 - `usage-lens`: the panel no longer freezes when a request hangs — the limits and stats calls time out after 15 seconds and release the busy flag.

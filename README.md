@@ -20,7 +20,7 @@ Both are read-only toward your data, ship no telemetry, and work independently.
 | [tariff-pulse](plugins/tariff-pulse/README.md) | DeepSeek peak/off-peak tariff: badge near the composer, full schedule page, countdown to the next price window | server + TUI + RPC | `/tier` |
 | [usage-lens](plugins/usage-lens/README.md) | Allowance and spend panel in the sidebar: Go allowance or Console budgets, pace, forecast, reset date, per-model split | server + TUI + RPC | `/limits` |
 
-Both plugins also give the agent a tool — `tariff.status` and `usage.forecast` — so it can answer the same questions ("is it peak now?", "how fast is the allowance going?") without opening a panel. Neither tool makes a network request.
+Both plugins also give the agent a tool — `tariff.status` and `usage.forecast` — so it can answer the same questions ("is it peak now?", "how fast is the allowance going?") without opening a panel. Neither tool makes a network request. They are not free: together they add about 210 tokens of tool schema to every request and one model request per call.
 
 ### What it looks like
 

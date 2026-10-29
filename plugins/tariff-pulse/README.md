@@ -36,7 +36,13 @@ A stale holiday calendar is refreshed in the background at launch, without a toa
 
 ## Agent tools
 
-`tariff.status` gives the same facts to the agent — tier, reason, countdown, prices on both sides of the next change, schedule — so it can answer "send it now or wait" without opening `/tier`. The session's model is used unless `providerID`/`modelID` are passed. It reads local data only: no request, no cost.
+`tariff.status` gives the same facts to the agent — tier, reason, countdown, prices on both sides of the next change, schedule — so it can answer "send it now or wait" without opening `/tier`. The session's model is used unless `providerID`/`modelID` are passed. It reads local data only: no API call.
+
+## Cost
+
+The badge and the `/tier` page run in the TUI: no model tokens, no model requests.
+
+`tariff.status` adds about 133 tokens of tool schema to every request and costs one model request per call — about $0.0012 on `deepseek-v4.1-flash` off-peak with a 130k-token context. The answer is about 80 tokens and stays in the session history.
 
 ## Installation
 
