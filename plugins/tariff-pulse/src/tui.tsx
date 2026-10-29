@@ -1,6 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createSignal } from "solid-js"
 import { buildTariff, normalizeHolidayPayload } from "./data.js"
+import { describeFailure } from "./failure.js"
 import { TariffRpc } from "./rpc.js"
 import {
   discountPercent,
@@ -254,7 +255,7 @@ export default Plugin.define({
               ),
             )
           } catch (error) {
-            syncError = (error as Error).message
+            syncError = describeFailure(error)
           }
         }
 
@@ -276,13 +277,14 @@ export default Plugin.define({
           console.error(`[tariff-pulse] calendar refreshed, server sync failed: ${syncError}`)
         }
       } catch (error) {
+        const reason = describeFailure(error)
         // A background attempt is not an action: no toast, just the log.
         if (quiet) {
-          console.error(`[tariff-pulse] calendar refresh failed: ${(error as Error).message}`)
+          console.error(`[tariff-pulse] calendar refresh failed: ${reason}`)
           return
         }
         context.ui.toast.show({
-          message: `Calendar refresh failed: ${(error as Error).message}`,
+          message: `Calendar refresh failed: ${reason}`,
           variant: "error",
         })
       }
