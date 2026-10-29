@@ -1,11 +1,7 @@
 import { Plugin } from "@opencode/plugin/tui"
 import { createSignal } from "solid-js"
 import {
-  DAY,
   bar,
-  cyclePace,
-  cycleStart,
-  forecast,
   formatMoney,
   formatSpan,
   formatTokens,
@@ -14,44 +10,21 @@ import {
   type UsagePoint,
 } from "./forecast.js"
 import { budgetBasis, budgetLabel, budgetPercent, pickBudget, type Budget } from "./budget.js"
+import { describeFailure } from "./failure.js"
 import { UsageRpc } from "./rpc.js"
-
-interface Meter {
-  readonly percent: number
-  readonly limited: boolean
-  readonly resetsAt: number
-}
-
-interface Limits {
-  readonly workspace: { readonly id: string; readonly name?: string; readonly usageURL: string }
-  readonly go?: { readonly rolling: Meter; readonly weekly: Meter; readonly monthly: Meter }
-  readonly budgets: readonly Budget[]
-}
-
-interface ModelUsage {
-  readonly model: { readonly id: string; readonly providerID: string }
-  readonly cost: number
-  readonly steps: number
-}
-
-interface Stats {
-  readonly cost: number
-  readonly steps: number
-  readonly sessions: number
-  readonly tokens: { readonly input: number; readonly output: number }
-  readonly models: readonly ModelUsage[]
-}
-
-interface Projection {
-  readonly kind: "limit" | "spend"
-  readonly projected: number
-}
+import {
+  STALE_MS,
+  budgetReached,
+  limitsPage,
+  monthStart,
+  planName,
+  projection,
+  type Limits,
+  type Stats,
+} from "./view.js"
 
 /** A stalled call must not leave the panel on old numbers for ever. */
 const RPC_TIMEOUT_MS = 15_000
-
-/** A reading older than a few polls is not fresh, and the panel says so. */
-const STALE_MS = 5 * 60_000
 
 /** Used only when the active theme defines none of the semantic tokens. */
 const FALLBACK_GREEN = "#3fb950"
@@ -123,11 +96,6 @@ export default Plugin.define({
       return start.getTime()
     }
 
-    const monthStart = () => {
-      const now = new Date()
-      return new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-    }
-
     const refresh = async () => {
       if (busy) return
       busy = true
@@ -149,7 +117,7 @@ export default Plugin.define({
           ),
           withTimeout(
             context.client.session.stats({
-              from: monthStart(),
+              from: monthStart(now),
               to: now,
               timezone,
               tools: "none",
@@ -183,9 +151,7 @@ export default Plugin.define({
             }
           }
         } else {
-          setError(
-            limitResult.reason instanceof Error ? limitResult.reason.message : "usage API failed",
-          )
+          setError(describeFailure(limitResult.reason))
         }
 
         if (statsResult.status === "fulfilled") setStats(statsResult.value as Stats)
@@ -247,46 +213,13 @@ export default Plugin.define({
       return `today $${formatMoney(value.cost)} · ${value.steps} steps · ${tokens}`
     }
 
-    const cyclePoints = () => {
-      const go = limits()?.go
-      if (!go) return points.items
-      // Points from a previous monthly cycle would make the rate negative.
-      const start = cycleStart(go.monthly.resetsAt)
-      return points.items.filter((point) => point.t >= start)
-    }
-
-    const projection = (): Projection | null => {
-      const go = limits()?.go
-      if (go) {
-        // The Console forecasts from the average pace since the start of the
-        // period, not from recent snapshots. Match it: a measured 7-day rate
-        // produced a completely different "on pace" than the Console.
-        const pace = cyclePace(go.monthly.percent, go.monthly.resetsAt, Date.now())
-        if (!pace) return null
-        return { kind: "limit", projected: pace.projected }
-      }
-
-      const value = month()
-      if (!value) return null
-      const now = Date.now()
-      const elapsed = Math.max(0.5, (now - monthStart()) / DAY)
-      const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
-      return {
-        kind: "spend",
-        projected: (value.cost / elapsed) * daysInMonth,
-      }
-    }
-
-    const budgetReached = () => {
-      if (limits()?.go) return false
-      const item = primaryBudget()
-      return !!item && (budgetPercent(item) ?? 0) >= 100
-    }
+    const outlook = () => projection(limits(), month(), Date.now())
+    const isBudgetReached = () => budgetReached(limits(), context.ui.model.current() ?? null)
 
     const paceLine = () => {
       if (limits()?.go?.monthly.limited) return "monthly limit reached"
-      if (budgetReached()) return "budget reached"
-      const value = projection()
+      if (isBudgetReached()) return "budget reached"
+      const value = outlook()
       if (!value) return ""
       if (value.kind === "limit") {
         return `on pace ${Math.round(value.projected)}% by reset`
@@ -295,20 +228,17 @@ export default Plugin.define({
     }
 
     const paceColor = () => {
-      if (limits()?.go?.monthly.limited || budgetReached()) return feedback.error
-      const value = projection()
+      if (limits()?.go?.monthly.limited || isBudgetReached()) return feedback.error
+      const value = outlook()
       if (!value) return muted
       if (value.kind === "limit" && value.projected > 100) return feedback.warning
       return base
     }
 
-    const plan = () =>
-      planLabel ??
-      (limits()?.go ? "Go" : budgets().length > 0 ? "Console" : "no plan limits")
-
     const planLine = () => {
+      const name = planName(limits(), planLabel)
       const item = limits()?.go ? undefined : primaryBudget()
-      return item ? `${plan()} · ${budgetLabel(item)}` : plan()
+      return item ? `${name} · ${budgetLabel(item)}` : name
     }
 
     const summaryColor = () => {
@@ -392,173 +322,23 @@ export default Plugin.define({
     }
 
     const detail = () => {
-      const data = limits()
-      if (error() && !data) {
-        return (
-          <box flexDirection="column">
-            <text fg={feedback.warning}>Usage API is unavailable</text>
-            <text fg={muted}>{error()}</text>
-            <text fg={muted}>/limits refresh — retry · esc — back</text>
-          </box>
-        )
-      }
-      if (signedOut()) {
-        return (
-          <box flexDirection="column">
-            <text fg={base}>Usage · not connected</text>
-            <text fg={muted}>Sign in to the OpenCode Console to see allowance and budgets.</text>
-            <text fg={muted}>esc — back</text>
-          </box>
-        )
-      }
-      if (!data) return <text fg={muted}>Loading…</text>
-
-      const lines: string[] = []
-      lines.push(`workspace  ${data.workspace.name ?? data.workspace.id}`)
-      lines.push(`plan       ${plan()}`)
-      lines.push("")
-
-      if (data.go) {
-        lines.push("Go allowance")
-        lines.push(
-          `  used     ${Math.round(data.go.monthly.percent)}%  ${
-            data.go.monthly.limited ? "limit reached" : bar(data.go.monthly.percent)
-          }`,
-        )
-        lines.push(`  resets   in ${formatSpan(data.go.monthly.resetsAt - Date.now())}`)
-        lines.push(
-          `  weekly   ${Math.round(data.go.weekly.percent)}% · resets in ${formatSpan(
-            data.go.weekly.resetsAt - Date.now(),
-          )}`,
-        )
-        lines.push(
-          `  rolling  ${Math.round(data.go.rolling.percent)}% · resets in ${formatSpan(
-            data.go.rolling.resetsAt - Date.now(),
-          )}`,
-        )
-      }
-
-      const list = budgets()
-      if (list.length > 0) {
-        if (data.go) lines.push("")
-        lines.push("Console budgets")
-        list.forEach((item, index) => {
-          if (index > 0) lines.push("")
-          const percent = budgetPercent(item)
-          const title = `${budgetLabel(item)}${item.picked ? " · picked" : ""}${
-            item.shared ? " · shared" : ""
-          }`
-          lines.push(`  ${list.length > 1 ? `${index + 1}. ` : ""}${title}`)
-          lines.push(
-            `  used     ${
-              percent === null
-                ? "no limit"
-                : percent >= 100
-                  ? "limit reached"
-                  : `${Math.round(percent)}%  ${bar(percent)}`
-            }`,
-          )
-          lines.push(
-            `  spend    $${formatMoney(budgetBasis(item))} / $${formatMoney(item.limit)}`,
-          )
-          const left = item.limit - budgetBasis(item)
-          if (left > 0) lines.push(`  left     $${formatMoney(left)}`)
-          lines.push(`  resets   in ${formatSpan(item.resetsAt - Date.now())}`)
-          if (item.scope === "each") lines.push("  scope    per model")
-          if (item.scope === "combined") lines.push("  scope    combined")
-          if (item.inputPriceAtLeast && item.inputPriceAtLeast > 0) {
-            lines.push(`  prices   input from $${formatMoney(item.inputPriceAtLeast)} / 1M`)
-          }
-
-          const models = item.models
-            .filter((model) => (model.spent ?? 0) > 0)
-            .slice()
-            .sort((a, b) => (b.spent ?? 0) - (a.spent ?? 0))
-            .slice(0, 3)
-          if (models.length > 0) {
-            const parts = models.map((model) =>
-              item.scope === "each"
-                ? `${model.name} $${formatMoney(model.spent ?? 0)}/$${formatMoney(item.limit)}`
-                : `${model.name} $${formatMoney(model.spent ?? 0)}`,
-            )
-            lines.push(`  models   ${parts.join(" · ")}`)
-          }
-        })
-      } else if (!data.go) {
-        lines.push("monthly limit")
-        lines.push("  none     no Go allowance or Console budget applies")
-      }
-
-      const value = stats()
-      if (value) {
-        lines.push("")
-        lines.push("today")
-        lines.push(
-          `  spend    $${formatMoney(value.cost)} · ${value.steps} steps · ${value.sessions} sessions`,
-        )
-        lines.push(
-          `  tokens   ${formatTokens(value.tokens.input)} in · ${formatTokens(
-            value.tokens.output,
-          )} out`,
-        )
-        for (const item of value.models.slice().sort((a, b) => b.cost - a.cost).slice(0, 5)) {
-          lines.push(`  ${shortModel(item.model.id).padEnd(9)} $${formatMoney(item.cost)}`)
-        }
-      }
-
-      lines.push("")
-      lines.push("forecast")
-      const pace = forecast(cyclePoints())
-      if (pace && pace.ratePerHour > 0) {
-        lines.push(
-          `  rate     ${pace.ratePerHour.toFixed(2)}%/h over ${Math.round(
-            pace.spanHours,
-          )}h (${pace.points} points)`,
-        )
-        if (pace.etaDays !== null) {
-          lines.push(`  limit    in ~${Math.round(pace.etaDays)} days at this rate`)
-        }
-      } else if (pace) {
-        lines.push("  rate     no change in the observation window")
-      } else {
-        lines.push("  rate     not enough history yet")
-      }
-      const projected = projection()
-      if (data.go?.monthly.limited) {
-        lines.push("  on pace  monthly limit reached")
-      } else if (budgetReached()) {
-        lines.push("  on pace  budget limit reached")
-      } else if (projected) {
-        if (projected.kind === "limit") {
-          lines.push(
-            `  on pace  ${Math.round(projected.projected)}% of the monthly limit by reset`,
-          )
-        } else {
-          lines.push(`  on pace  $${formatMoney(projected.projected)} per month`)
-        }
-      } else if (data.go) {
-        lines.push("  on pace  not enough usage to forecast yet")
-      } else {
-        lines.push("  on pace  n/a (no month data yet)")
-      }
-      const monthValue = month()
-      if (monthValue) lines.push(`  month    $${formatMoney(monthValue.cost)} so far`)
-
-      lines.push("")
-      // The data above is kept from the last successful read; say that it is old
-      // and why, instead of pretending the failure did not happen.
-      if (error()) {
-        lines.push(`refresh failed: ${error()}`)
-      }
-      const stale = staleAge()
-      if (stale !== null) lines.push(`stale ${formatSpan(stale)} — numbers are from the last good read`)
-      const updated = updatedAt()
-      lines.push(
-        `${updated ? new Date(updated).toLocaleTimeString() : "—"} · ${data.workspace.usageURL}`,
+      const page = limitsPage({
+        limits: limits(),
+        stats: stats(),
+        month: month(),
+        points: points.items,
+        model: context.ui.model.current() ?? null,
+        planLabel,
+        signedOut: signedOut(),
+        error: error(),
+        updatedAt: updatedAt(),
+        now: Date.now(),
+      })
+      return (
+        <text fg={page.tone === "warning" ? feedback.warning : muted}>
+          {page.lines.join("\n")}
+        </text>
       )
-      lines.push("/limits refresh — update · esc / q — back")
-
-      return <text fg={muted}>{lines.join("\n")}</text>
     }
 
     const unregisterRoute = context.ui.router.register({
@@ -636,8 +416,3 @@ export default Plugin.define({
     }
   },
 })
-
-function shortModel(id: string): string {
-  const clean = id.replace(/^.*\//, "")
-  return clean.length > 12 ? `${clean.slice(0, 11)}…` : clean
-}
