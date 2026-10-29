@@ -14,6 +14,7 @@ import {
   modelKey,
   nextTierChange,
   resolveTier,
+  statusText,
   tierAt,
   type Tariff,
 } from "../src/tariff.ts"
@@ -254,6 +255,45 @@ test("discountPercent derives the off-peak discount from the multiplier", () => 
   assert.equal(discountPercent(tariff), 50)
   assert.equal(discountPercent({ ...tariff, peakMultiplier: 1 }), 0)
   assert.equal(discountPercent({ ...tariff, peakMultiplier: 4 }), 75)
+})
+
+test("statusText names the tier, the next change and both price lists", () => {
+  const moment = at("2026-10-27T02:00:00Z")
+  const state = resolveTier(moment, tariff, "opencode-go", "deepseek-v4.1-flash")
+  assert.ok(state)
+  const text = statusText(tariff, state, moment.getTime())
+
+  assert.match(text, /^PEAK ×2 · DeepSeek · deepseek-flash$/m)
+  assert.match(text, /^reason window · next change .+ local · in 2h$/m)
+  assert.match(text, /^now {3}input \$0\.3 · cache \$0\.006 · output \$1\.20 \/ 1M$/m)
+  assert.match(text, /^next {2}input \$0\.15 · cache \$0\.003 · output \$0\.6 \/ 1M$/m)
+  assert.match(text, /^schedule 01:00–04:00, 06:00–10:00 UTC, Mon–Fri$/m)
+  assert.match(text, /^PRC holidays off-peak \(\d+ days, valid until 2026-12-31\)$/m)
+  assert.doesNotMatch(text, /warning/)
+})
+
+test("statusText on a stale calendar admits the uncertainty", () => {
+  const stale: Tariff = {
+    ...tariff,
+    holidays: { dates: ["2026-10-01"], validUntil: "2025-12-31" },
+  }
+  const moment = at("2026-10-01T02:00:00Z")
+  const state = resolveTier(moment, stale, "opencode-go", "deepseek-v4.1-flash")
+
+  assert.match(statusText(stale, state, moment.getTime()), /^PEAK/m)
+  assert.match(
+    statusText(stale, state, moment.getTime()),
+    /warning: the holiday calendar is stale, so peak may actually be off-peak/,
+  )
+})
+
+test("statusText lists what the tariff covers when the model is outside it", () => {
+  const text = statusText(tariff, null, Date.UTC(2026, 9, 27))
+
+  assert.match(text, /^DeepSeek: this model is outside the tariff\.$/m)
+  assert.match(text, /providers deepseek, opencode-go/)
+  assert.match(text, /models deepseek-flash, deepseek-v4-pro/)
+  assert.match(text, /^schedule /m)
 })
 
 test("the bundled holiday calendar is still in date", () => {

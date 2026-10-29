@@ -1,7 +1,7 @@
 import { Plugin } from "@opencode/plugin"
 import { buildTariff } from "./data.js"
 import { TariffRpc } from "./rpc.js"
-import { resolveTier, type TierState } from "./tariff.js"
+import { resolveTier, statusText, type TierState } from "./tariff.js"
 
 interface StatusInput {
   readonly providerID: string
@@ -82,6 +82,39 @@ export default Plugin.define({
             : {}),
         }
       },
+    })
+
+    // The same facts for the agent: "send it now or wait" without opening /tier.
+    await ctx.tool.transform((editor) => {
+      editor.namespace({ name: "tariff", description: "DeepSeek peak/off-peak tariff" })
+      editor.add({
+        name: "status",
+        description:
+          "DeepSeek peak/off-peak tariff for the session's model or a given one: current tier, time to the next change, prices per 1M tokens and the weekday schedule. Ask before a long or expensive request to decide whether waiting is cheaper.",
+        input: {
+          type: "object",
+          properties: {
+            providerID: { type: "string", description: "Defaults to the session's provider" },
+            modelID: { type: "string", description: "Defaults to the session's model" },
+          },
+          additionalProperties: false,
+        },
+        options: { namespace: "tariff" },
+        async execute(input, context) {
+          const wanted = input as { providerID?: string; modelID?: string }
+          let { providerID, modelID } = wanted
+          if (!providerID || !modelID) {
+            const session = await ctx.session
+              .get({ sessionID: context.sessionID })
+              .catch(() => undefined)
+            providerID ??= session?.model?.providerID
+            modelID ??= session?.model?.id
+          }
+          const state =
+            providerID && modelID ? resolveTier(new Date(), tariff, providerID, modelID) : null
+          return { content: statusText(tariff, state, Date.now()) }
+        },
+      })
     })
   },
 })

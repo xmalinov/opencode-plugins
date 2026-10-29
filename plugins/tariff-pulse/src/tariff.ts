@@ -232,6 +232,56 @@ export function discountPercent(tariff: Tariff): number {
   return Math.round((1 - 1 / tariff.peakMultiplier) * 100)
 }
 
+function scheduleLine(tariff: Tariff): string {
+  const times = tariff.windowsUTC.map((window) => `${window.from}–${window.to}`).join(", ")
+  const weekdays = tariff.windowsUTC.every(
+    (window) =>
+      window.days.length === 5 && [1, 2, 3, 4, 5].every((day) => window.days.includes(day)),
+  )
+  return `schedule ${times} UTC${weekdays ? ", Mon–Fri" : ""}`
+}
+
+/**
+ * The tariff as text for the agent: the badge's facts with words instead of glyphs,
+ * the prices on both sides of the next change, and the calendar state.
+ */
+export function statusText(tariff: Tariff, state: TierState | null, now: number): string {
+  const calendar = tariff.holidays
+    ? `PRC holidays off-peak (${tariff.holidays.dates.length} days, valid until ${tariff.holidays.validUntil})`
+    : "no PRC holiday calendar"
+
+  if (!state) {
+    return [
+      `${tariff.label}: this model is outside the tariff.`,
+      `covers providers ${tariff.providers.join(", ")}; models ${Object.keys(tariff.models).join(", ")}.`,
+      scheduleLine(tariff),
+      calendar,
+    ].join("\n")
+  }
+
+  const lines = [
+    `${state.tier === "peak" ? "PEAK" : "OFF-PEAK"} ×${tariff.peakMultiplier} · ${tariff.label} · ${state.modelKey}`,
+    `reason ${state.reason} · next change ${formatClock(state.nextChangeAt)} local${
+      state.nextChangeAt === null ? "" : ` · in ${formatShort(state.nextChangeAt - now)}`
+    }`,
+  ]
+
+  const prices = tariff.models[state.modelKey]?.prices
+  if (prices) {
+    const current = prices[state.tier]
+    const next = prices[state.tier === "peak" ? "offPeak" : "peak"]
+    const line = (label: string, price: Price) =>
+      `${label} input $${formatPrice(price.input)} · cache $${formatPrice(price.cacheRead)} · output $${formatPrice(price.output)} / 1M`
+    lines.push(line("now  ", current), line("next ", next))
+  }
+
+  lines.push(scheduleLine(tariff), calendar)
+  if (state.confidence !== "exact") {
+    lines.push("warning: the holiday calendar is stale, so peak may actually be off-peak")
+  }
+  return lines.join("\n")
+}
+
 /** Compact countdown: 42m, 1h 42m, 2d 4h. */
 export function formatShort(ms: number | null): string {
   if (ms === null) return "—"
