@@ -1,6 +1,6 @@
 {
   "name": "opencode-usage-lens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Usage, allowance and forecast panel for OpenCode V2 (Go and Console budgets)",
   "keywords": ["opencode", "opencode-plugin", "usage", "limits", "cost", "forecast", "tui"],
   "homepage": "https://github.com/xmalinov/opencode-plugins/tree/main/plugins/usage-lens#readme",

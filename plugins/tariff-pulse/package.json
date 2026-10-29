@@ -1,6 +1,6 @@
 {
   "name": "opencode-tariff-pulse",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Peak/off-peak tariff indicator for DeepSeek models in OpenCode V2",
   "keywords": ["opencode", "opencode-plugin", "deepseek", "tariff", "pricing", "tui"],
   "homepage": "https://github.com/xmalinov/opencode-plugins/tree/main/plugins/tariff-pulse#readme",

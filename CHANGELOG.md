@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-29
+
 ### Added
 
 - `tariff-pulse` and `usage-lens`: the agent can answer the panels' questions itself.
@@ -64,5 +66,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation in English and Russian (`README.md`, `README.ru.md`).
 - MIT license, contribution guide, code of conduct and issue templates.
 
-[Unreleased]: https://github.com/xmalinov/opencode-plugins/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/xmalinov/opencode-plugins/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/xmalinov/opencode-plugins/releases/tag/v0.2.0
 [0.1.0]: https://github.com/xmalinov/opencode-plugins/releases/tag/v0.1.0
