@@ -17,11 +17,11 @@ cd opencode-plugins
 
 Enable the plugins locally through `opencode.json` (already present in the repository, pointing at `./plugins/*`), then start OpenCode from the repository root.
 
-Dev dependencies are installed without touching `package.json`:
+Dev dependencies live in the root `package.json`:
 
 ```sh
-npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
-./node_modules/.bin/tsc -p tsconfig.json
+npm install
+npm run check
 ```
 
 `tsc` runs with `noEmit`; there is no artifact to publish from this repository. Each plugin's `src/index.ts` is loaded as-is by OpenCode.
@@ -29,7 +29,7 @@ npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @op
 Unit tests cover the tariff clock and its bundled data (`plugins/tariff-pulse/test/tariff.test.ts`). They use the built-in Node runner, so no test dependency is installed:
 
 ```sh
-node --test plugins/tariff-pulse/test/tariff.test.ts
+npm test
 ```
 
 Node needs native type stripping for this (`22.18+`, verified on `24`).

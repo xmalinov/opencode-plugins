@@ -9,6 +9,7 @@
     "jsxImportSource": "@opentui/solid",
     "strict": true,
     "noEmit": true,
+    "noUnusedLocals": true,
     "skipLibCheck": true,
     "allowJs": false,
     "types": []
