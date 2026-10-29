@@ -213,14 +213,14 @@ export default Plugin.define({
       return `today $${formatMoney(value.cost)} · ${value.steps} steps · ${tokens}`
     }
 
-    const outlook = () => projection(limits(), month(), Date.now())
+    const outlook = () => projection(limits(), month(), Date.now(), points.items)
     const isBudgetReached = () => budgetReached(limits(), context.ui.model.current() ?? null)
 
     const paceLine = () => {
       if (limits()?.go?.monthly.limited) return "monthly limit reached"
       if (isBudgetReached()) return "budget reached"
       const value = outlook()
-      if (!value) return ""
+      if (!value) return "on pace —"
       if (value.kind === "limit") {
         return `on pace ${Math.round(value.projected)}% by reset`
       }

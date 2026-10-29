@@ -159,6 +159,28 @@ export function cyclePace(percent: number, resetsAt: number, now: number): PaceE
   }
 }
 
+/**
+ * Projected percentage of the monthly limit at reset.
+ *
+ * The Console formula (`cyclePace`) hides the forecast on the first day of a
+ * cycle. The panel still shows the row there, so it falls back to the rate
+ * measured from local snapshots when one exists.
+ */
+export function projectLimit(input: {
+  readonly percent: number
+  readonly resetsAt: number
+  readonly now: number
+  readonly ratePerHour?: number | null
+}): number | null {
+  const pace = cyclePace(input.percent, input.resetsAt, input.now)
+  if (pace) return pace.projected
+  if (input.percent <= 0) return null
+  const rate = input.ratePerHour ?? 0
+  if (!(rate > 0)) return null
+  const hoursToReset = Math.max(0, (input.resetsAt - input.now) / HOUR)
+  return input.percent + rate * hoursToReset
+}
+
 export function bar(percent: number, width = 8): string {
   const clamped = Math.max(0, Math.min(100, percent))
   const filled = Math.round((clamped / 100) * width)

@@ -10,12 +10,12 @@ import { budgetBasis, budgetLabel, budgetPercent, pickBudget, type Budget } from
 import {
   DAY,
   bar,
-  cyclePace,
   cycleStart,
   forecast,
   formatMoney,
   formatSpan,
   formatTokens,
+  projectLimit,
   type UsagePoint,
 } from "./forecast.ts"
 
@@ -85,11 +85,18 @@ export function projection(
   limits: Limits | null,
   month: Stats | null,
   now: number,
+  points: readonly UsagePoint[] = [],
 ): Projection | null {
   const go = limits?.go
   if (go) {
-    const pace = cyclePace(go.monthly.percent, go.monthly.resetsAt, now)
-    return pace ? { kind: "limit", projected: pace.projected } : null
+    const measured = forecast(cyclePoints(limits, points))
+    const projected = projectLimit({
+      percent: go.monthly.percent,
+      resetsAt: go.monthly.resetsAt,
+      now,
+      ratePerHour: measured?.ratePerHour ?? null,
+    })
+    return projected === null ? null : { kind: "limit", projected }
   }
   if (!month) return null
 
@@ -254,7 +261,7 @@ export function limitsPage(input: LimitsViewInput): LimitsView {
     lines.push("  rate     not enough history yet")
   }
 
-  const projected = projection(data, month, now)
+  const projected = projection(data, month, now, points)
   if (data.go?.monthly.limited) {
     lines.push("  on pace  monthly limit reached")
   } else if (budgetReached(data, model)) {

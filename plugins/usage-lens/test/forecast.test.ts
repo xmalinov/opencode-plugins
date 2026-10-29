@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { usageText, type UsagePoint } from "../src/forecast.ts"
+import { usageText, cyclePace, projectLimit, type UsagePoint } from "../src/forecast.ts"
 
 const HOUR = 3_600_000
 const MINUTE = 60_000
@@ -43,4 +43,35 @@ test("a flat series is reported as no change", () => {
 
   assert.match(text, /^rate: no change over 12h \(3 points\)$/m)
   assert.doesNotMatch(text, /^limit:/m)
+})
+
+test("the projected limit uses the Console formula once the cycle has a full day", () => {
+  const resetsAt = Date.UTC(2026, 10, 1, 0, 0)
+  const midCycle = Date.UTC(2026, 9, 16, 0, 0)
+
+  assert.ok(cyclePace(50, resetsAt, midCycle) !== null)
+  const projected = projectLimit({ percent: 50, resetsAt, now: midCycle, ratePerHour: 99 })
+  // 15 of 31 days elapsed: 50% stretches to ~103%.
+  assert.ok(projected !== null)
+  assert.ok(Math.abs(projected! - (50 * 31) / 15) < 1e-6, String(projected))
+})
+
+test("on the first day the projection falls back to the measured rate", () => {
+  const resetsAt = Date.UTC(2026, 10, 1, 0, 0)
+  const early = Date.UTC(2026, 9, 1, 6, 0)
+  const hoursLeft = (resetsAt - early) / HOUR
+
+  // The Console hides the forecast here; the panel still shows a number.
+  assert.equal(cyclePace(10, resetsAt, early), null)
+  const projected = projectLimit({ percent: 10, resetsAt, now: early, ratePerHour: 0.5 })
+  assert.ok(projected !== null)
+  assert.ok(Math.abs(projected! - (10 + 0.5 * hoursLeft)) < 1e-6, String(projected))
+})
+
+test("without usage or a measured rate there is no projection", () => {
+  const resetsAt = Date.UTC(2026, 10, 1, 0, 0)
+  const early = Date.UTC(2026, 9, 1, 6, 0)
+
+  assert.equal(projectLimit({ percent: 0, resetsAt, now: early, ratePerHour: 0.5 }), null)
+  assert.equal(projectLimit({ percent: 10, resetsAt, now: early, ratePerHour: null }), null)
 })
