@@ -7,6 +7,7 @@ import {
   formatClock,
   formatPrice,
   formatShort,
+  hasFreshCalendar,
   resolveTier,
   type ModelTariff,
   type TierState,
@@ -16,6 +17,33 @@ const DEFAULT_HOLIDAY_URL = "https://timor.tech/api/holiday/year"
 const TEST_PEAK = Date.UTC(2026, 9, 27, 2, 0, 0)
 const TEST_OFF_PEAK = Date.UTC(2026, 9, 27, 12, 0, 0)
 
+/** A stalled call must not leave `/tier refresh` silent for ever. */
+const RPC_TIMEOUT_MS = 15_000
+const FETCH_TIMEOUT_MS = 10_000
+
+/** Used only when the active theme defines none of the semantic tokens. */
+const FALLBACK_GREEN = "#3fb950"
+const FALLBACK_YELLOW = "#d29922"
+
+function withTimeout<T>(promise: Promise<T>, ms = RPC_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) =>
+      setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms),
+    ),
+  ])
+}
+
+/** First path the theme actually defines: a theme is not required to carry the feedback tokens. */
+function themeColour(theme: any, ...paths: string[][]): any {
+  for (const path of paths) {
+    let node: any = theme
+    for (const key of path) node = node?.[key]
+    if (node !== undefined && node !== null) return node
+  }
+  return undefined
+}
+
 export default Plugin.define({
   id: "tariff.pulse.cli",
   setup(context) {
@@ -23,6 +51,22 @@ export default Plugin.define({
     const nearMinutes =
       typeof options.nearChangeMinutes === "number" ? options.nearChangeMinutes : 15
     const nearMs = nearMinutes * 60_000
+
+    const muted = context.theme.text.muted
+    const success =
+      themeColour(
+        context.theme,
+        ["text", "feedback", "success", "base"],
+        ["syntax", "string"],
+        ["diff", "text", "added"],
+      ) ?? FALLBACK_GREEN
+    const warning =
+      themeColour(
+        context.theme,
+        ["text", "feedback", "warning", "base"],
+        ["syntax", "type"],
+        ["syntax", "number"],
+      ) ?? FALLBACK_YELLOW
 
     const [tick, setTick] = createSignal(Date.now())
     const [sim, setSim] = context.storage.store("sim", { initial: { at: 0 } })
@@ -72,11 +116,11 @@ export default Plugin.define({
     }
 
     const color = (state: TierState) => {
-      if (state.tier === "offPeak") return context.theme.text.feedback.success.base
+      if (state.tier === "offPeak") return success
       if (state.nextChangeAt !== null && state.nextChangeAt - now() <= nearMs) {
-        return context.theme.text.feedback.warning.base
+        return warning
       }
-      return context.theme.text.muted
+      return muted
     }
 
     const badge = () => {
@@ -96,7 +140,7 @@ export default Plugin.define({
 
     const header = () => {
       const view = current()
-      if (!view) return <text fg={context.theme.text.muted}>No tariff for the selected model</text>
+      if (!view) return <text fg={muted}>No tariff for the selected model</text>
       const { state } = view
       const config = tariff()
       const label =
@@ -109,7 +153,7 @@ export default Plugin.define({
 
     const body = () => {
       const view = current()
-      if (!view) return <text fg={context.theme.text.muted}>Provider or model is outside the tariff.</text>
+      if (!view) return <text fg={muted}>Provider or model is outside the tariff.</text>
 
       const { state, model } = view
       const config = tariff()
@@ -153,7 +197,7 @@ export default Plugin.define({
       lines.push("esc / q — back · /tier refresh — calendar")
       lines.push("/tier test peak | off | live — preview colors")
 
-      return <text fg={context.theme.text.muted}>{lines.join("\n")}</text>
+      return <text fg={muted}>{lines.join("\n")}</text>
     }
 
     const unregisterRoute = context.ui.router.register({
@@ -171,14 +215,17 @@ export default Plugin.define({
       render: badge,
     })
 
-    const refresh = async () => {
+    const refresh = async (quiet = false) => {
       const year = new Date().getFullYear()
       const url =
         typeof options.holidayURL === "string"
           ? options.holidayURL
           : `${DEFAULT_HOLIDAY_URL}/${year}`
       try {
-        const response = await fetch(url, { headers: { accept: "application/json" } })
+        const response = await fetch(url, {
+          headers: { accept: "application/json" },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        })
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const payload = normalizeHolidayPayload(await response.json(), year)
         if (!payload) throw new Error("unrecognized calendar payload")
@@ -196,13 +243,15 @@ export default Plugin.define({
         let syncError: string | null = directory ? null : "no location"
         if (directory) {
           try {
-            await context.client.rpc(TariffRpc).setHolidays(
-              {
-                dates: [...payload.dates],
-                validUntil: payload.validUntil,
-                source: payload.source ?? url,
-              },
-              { location: { directory } },
+            await withTimeout(
+              context.client.rpc(TariffRpc).setHolidays(
+                {
+                  dates: [...payload.dates],
+                  validUntil: payload.validUntil,
+                  source: payload.source ?? url,
+                },
+                { location: { directory } },
+              ),
             )
           } catch (error) {
             syncError = (error as Error).message
@@ -211,23 +260,39 @@ export default Plugin.define({
 
         // The badge reads the TUI copy, so a failed sync is not fatal — but do
         // not report success when only the local calendar was updated.
-        context.ui.toast.show(
-          syncError
-            ? {
-                message: `Holiday calendar updated locally (${payload.dates.length} days); server sync failed: ${syncError}`,
-                variant: "warning",
-              }
-            : {
-                message: `Holiday calendar updated: ${payload.dates.length} days`,
-                variant: "success",
-              },
-        )
+        if (!quiet) {
+          context.ui.toast.show(
+            syncError
+              ? {
+                  message: `Holiday calendar updated locally (${payload.dates.length} days); server sync failed: ${syncError}`,
+                  variant: "warning",
+                }
+              : {
+                  message: `Holiday calendar updated: ${payload.dates.length} days`,
+                  variant: "success",
+                },
+          )
+        } else if (syncError) {
+          console.error(`[tariff-pulse] calendar refreshed, server sync failed: ${syncError}`)
+        }
       } catch (error) {
+        // A background attempt is not an action: no toast, just the log.
+        if (quiet) {
+          console.error(`[tariff-pulse] calendar refresh failed: ${(error as Error).message}`)
+          return
+        }
         context.ui.toast.show({
           message: `Calendar refresh failed: ${(error as Error).message}`,
           variant: "error",
         })
       }
+    }
+
+    // The bundled calendar expires, and after that the badge stays at `▲?` until
+    // someone remembers `/tier refresh`. Refresh it in the background, but only
+    // when it is actually stale, so a launch in normal times makes no request.
+    if (options.autoHolidays !== false && !hasFreshCalendar(tariff().holidays, new Date())) {
+      void refresh(true)
     }
 
     context.keymap.layer(() => ({

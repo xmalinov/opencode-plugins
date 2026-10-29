@@ -158,14 +158,38 @@ export function nextTierChange(now: Date, tariff: Tariff, current: Tier): number
   return null
 }
 
+/**
+ * The meeting point for provider ids and catalogue names: `deepseek-v4.1-flash`,
+ * `DeepSeek V4.1 Flash` and `deepseek-flash-1017` all have to resolve to the same
+ * model. Case and punctuation go first, then a snapshot stamp.
+ *
+ * Labels are deliberately NOT stripped: `-free` is a different tariff (the free
+ * variants must not inherit paid prices), so only the dated suffix churns.
+ */
+export function modelKey(value: string): string {
+  const key = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+
+  // A stamp is dropped only when at least four characters of the name remain:
+  // a model whose whole name is a number must survive.
+  const stripped = key.replace(/-\d{4,6}$/, (stamp) =>
+    key.length - stamp.length >= 4 ? "" : stamp,
+  )
+  return stripped.replace(/^-|-$/g, "")
+}
+
 export function findModel(tariff: Tariff, modelID: string): [string, ModelTariff] | null {
   const direct = tariff.models[modelID]
   if (direct) return [modelID, direct]
 
-  const wanted = modelID.toLowerCase()
+  const wanted = modelKey(modelID)
+  if (!wanted) return null
   for (const [key, model] of Object.entries(tariff.models)) {
-    if (key.toLowerCase() === wanted) return [key, model]
-    if (model.aliases?.some((alias) => alias.toLowerCase() === wanted)) return [key, model]
+    if (modelKey(key) === wanted) return [key, model]
+    if (model.aliases?.some((alias) => modelKey(alias) === wanted)) return [key, model]
   }
   return null
 }

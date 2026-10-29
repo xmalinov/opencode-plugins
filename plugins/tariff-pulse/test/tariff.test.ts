@@ -11,6 +11,7 @@ import {
   formatShort,
   hasFreshCalendar,
   isHoliday,
+  modelKey,
   nextTierChange,
   resolveTier,
   tierAt,
@@ -120,6 +121,33 @@ test("paid model aliases are matched case-insensitively, free variants are not",
   assert.equal(findModel(tariff, "deepseek-v4-pro")?.[0], "deepseek-v4-pro")
   assert.equal(findModel(tariff, "deepseek-v4.1-flash-free"), null)
   assert.equal(findModel(tariff, "gpt-5"), null)
+})
+
+test("model keys fold case, punctuation and a snapshot stamp", () => {
+  assert.equal(modelKey("DeepSeek V4.1 Flash"), "deepseek-v4-1-flash")
+  assert.equal(modelKey("deepseek--flash__1017"), "deepseek-flash")
+  assert.equal(modelKey("--"), "")
+  // Labels stay: `-free` is another tariff, not another name for this one.
+  assert.equal(modelKey("deepseek-v4.1-flash-free"), "deepseek-v4-1-flash-free")
+  // A stamp is not stripped when it would leave a name too short to be a model.
+  assert.equal(modelKey("abc-1017"), "abc-1017")
+})
+
+test("a new snapshot of a known model resolves without a new alias", () => {
+  assert.equal(findModel(tariff, "deepseek-flash-1201")?.[0], "deepseek-flash")
+  assert.equal(findModel(tariff, "deepseek-v4-pro-1201")?.[0], "deepseek-v4-pro")
+  // The catalogue's own spelling meets the provider id.
+  assert.equal(findModel(tariff, "DeepSeek V4.1 Flash 1017")?.[0], "deepseek-flash")
+  const state = resolveTier(at("2026-10-27T02:00:00Z"), tariff, "opencode-go", "deepseek-flash-1201")
+  assert.equal(state?.modelKey, "deepseek-flash")
+  assert.equal(state?.tier, "peak")
+})
+
+test("normalization does not fuse models or pull in free variants", () => {
+  assert.equal(findModel(tariff, "deepseek-v4-pro-free"), null)
+  assert.equal(findModel(tariff, "deepseek-flash-free"), null)
+  assert.equal(findModel(tariff, "deepseek-chat"), null)
+  assert.equal(findModel(tariff, "gpt-4-0613"), null)
 })
 
 test("providers and models outside the tariff are not resolved", () => {

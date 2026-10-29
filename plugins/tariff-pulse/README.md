@@ -32,6 +32,8 @@ OpenCode's model catalogue advertises the **off-peak** price, which is why the b
 - `/tier test peak` / `/tier test off` / `/tier test live` — freeze the clock to check colors (`TEST` appears in the badge).
 - `esc` or `q` — leave the `/tier` page.
 
+A stale holiday calendar is refreshed in the background at launch, without a toast: the badge would otherwise stay at `▲?` until someone remembered `/tier refresh`. The request is made only while the stored calendar is stale.
+
 ## Installation
 
 ```jsonc title="opencode.jsonc"
@@ -55,7 +57,8 @@ OpenCode's model catalogue advertises the **off-peak** price, which is why the b
 | `providers` | `["deepseek", "opencode-go"]` | providers the tariff applies to |
 | `nearChangeMinutes` | `15` | badge turns amber this many minutes before a window change |
 | `holidays` | bundled 2026 calendar | `{ dates: string[], validUntil: string, source?: string }` |
-| `holidayURL` | `https://timor.tech/api/holiday/year/<year>` | source used by `/tier refresh` |
+| `holidayURL` | `https://timor.tech/api/holiday/year/<year>` | source used by `/tier refresh` and the background refresh |
+| `autoHolidays` | `true` | refresh a stale calendar in the background at launch; `false` keeps the plugin fully offline until `/tier refresh` |
 
 ## RPC
 
@@ -77,14 +80,15 @@ opencode api post "/api/rpc/tariff_pulse/status?location[directory]=$PWD" \
 - Prices are baked into plugin data. When the price list changes, update `src/data.ts` — the source and date are recorded there.
 - `opencode-go` is confirmed: its price list has both Off-Peak and Peak rows.
 - Free model variants are not matched on purpose: a `-free` model has no per-token price, so a peak multiplier would misrepresent its cost. Aliases name paid models only.
+- Model ids are matched by a normalized key: case and punctuation are ignored, and so is a snapshot suffix (`deepseek-flash-1017` is `deepseek-flash`). Labels are not ignored — `-free` stays a different model.
 - The provider list comes from `options.providers`, and OpenCode passes options only in the object form of the plugin entry. A plain string entry (`"./plugins/tariff-pulse"`) silently gets the defaults `["deepseek", "opencode-go"]`.
 
 ## Development
 
 ```sh
-npm install --no-save typescript @types/node @opencode/plugin@2.2.0 solid-js @opentui/core@0.6.6 @opentui/solid@0.6.6
-./node_modules/.bin/tsc -p tsconfig.json
-node --test plugins/tariff-pulse/test/tariff.test.ts
+npm install
+npm run check
+npm test
 ```
 
 `src/tariff.ts` has no SDK imports; `test/tariff.test.ts` covers it with the built-in Node test runner (Node `22.18+` for native type stripping, verified on `24`).
