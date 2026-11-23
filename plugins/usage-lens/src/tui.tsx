@@ -106,9 +106,11 @@ export default Plugin.define({
         const now = Date.now()
 
         const [limitResult, statsResult, monthResult] = await Promise.allSettled([
-          withTimeout(context.client.usage.limits({ location: { directory: location.directory } })),
           withTimeout(
-            context.client.session.stats({
+            context.client.experimental.usage.limits({ location: { directory: location.directory } }),
+          ),
+          withTimeout(
+            context.client.experimental.session.stats({
               from: dayStart(),
               to: now,
               timezone,
@@ -116,7 +118,7 @@ export default Plugin.define({
             }),
           ),
           withTimeout(
-            context.client.session.stats({
+            context.client.experimental.session.stats({
               from: monthStart(now),
               to: now,
               timezone,

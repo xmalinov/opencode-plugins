@@ -3,7 +3,7 @@
 **English** · [Русский](README.ru.md)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![OpenCode](https://img.shields.io/badge/OpenCode-v2.2.0-6b5bff.svg)](https://opencode.ai)
+[![OpenCode](https://img.shields.io/badge/OpenCode-v2.4.0-6b5bff.svg)](https://opencode.ai)
 [![Status](https://img.shields.io/badge/status-beta-orange.svg)](#status)
 
 Two plugins for [OpenCode](https://opencode.ai) V2 that answer two cost questions inside the TUI:
@@ -42,7 +42,7 @@ today $3.42 · 14 steps · 150k
 
 ## Requirements
 
-- **OpenCode V2** — developed and verified against `2.2.0`. V1 plugins use a different API and are not compatible.
+- **OpenCode V2** `2.4.0` or newer. V1 plugins use a different API and are not compatible.
 - `tariff-pulse` needs a DeepSeek-backed provider (`deepseek` or `opencode-go` by default; `-free` model variants are not matched, since they have no per-token price).
 - `usage-lens` needs a signed-in OpenCode Console session; without it the panel shows `not connected` instead of failing. A Go subscription is optional: without it Console budgets act as the limit.
 

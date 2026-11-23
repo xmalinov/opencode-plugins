@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Both plugins: verified on OpenCode `2.4.0`. `@opencode/plugin` is now `2.4.0`, the TUI peer range is `>=0.9.4` (the SDK's own requirement) and the dev dependencies use `@opentui/* 0.9.7`; the rest of the code needed no changes.
+- `usage-lens`: the panel calls `client.experimental.usage.limits` and `client.experimental.session.stats`. OpenCode 2.4.0 marks `client.usage.limits` and `client.session.stats` deprecated and removes them in the next minor, so this plugin now requires OpenCode `2.4.0` or newer.
+
 ## [0.2.0] - 2026-10-29
 
 ### Added

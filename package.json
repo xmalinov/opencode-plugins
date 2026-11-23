@@ -7,9 +7,10 @@
     "test": "node --test \"plugins/*/test/*.test.ts\""
   },
   "devDependencies": {
-    "@opencode/plugin": "^2.2.0",
-    "@opentui/core": "^0.6.6",
-    "@opentui/solid": "^0.6.6",
+    "@opencode/client": "^2.4.0",
+    "@opencode/plugin": "^2.4.0",
+    "@opentui/core": "^0.9.7",
+    "@opentui/solid": "^0.9.7",
     "@types/node": "^26.6.5",
     "solid-js": "^1.9.12",
     "typescript": "^5.9.3"

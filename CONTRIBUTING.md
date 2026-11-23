@@ -4,7 +4,7 @@ Thanks for taking the time to improve these plugins. Issues and pull requests ar
 
 ## Before you start
 
-- This repository targets **OpenCode V2** (`2.2.0` at the time of writing). V1 plugin APIs are out of scope.
+- This repository targets **OpenCode V2** (`2.4.0` at the time of writing). V1 plugin APIs are out of scope.
 - There is no build step, linter or CI. Pure logic is covered by the built-in `node:test` runner (`plugins/*/test/`). Do not add a test framework or another runner unless the maintainer agrees in the issue first.
 - Keep pull requests focused: one plugin or one concern per PR.
 

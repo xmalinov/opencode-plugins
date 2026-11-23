@@ -3,7 +3,7 @@
 [English](README.md) · **Русский**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![OpenCode](https://img.shields.io/badge/OpenCode-v2.2.0-6b5bff.svg)](https://opencode.ai)
+[![OpenCode](https://img.shields.io/badge/OpenCode-v2.4.0-6b5bff.svg)](https://opencode.ai)
 [![Status](https://img.shields.io/badge/status-beta-orange.svg)](#статус)
 
 Два плагина для [OpenCode](https://opencode.ai) V2, которые отвечают на два вопроса о цене прямо в TUI:
@@ -44,7 +44,7 @@ today $3.42 · 14 steps · 150k
 
 ## Требования
 
-- **OpenCode V2** — разработка и проверка на `2.2.0`. V1-плагины используют другой API и несовместимы.
+- **OpenCode V2** `2.4.0` или новее. V1-плагины используют другой API и несовместимы.
 - `tariff-pulse` требует провайдера с DeepSeek (`deepseek` или `opencode-go` по умолчанию; варианты моделей `-free` не матчатся — у них нет цены за токены).
 - `usage-lens` требует выполненного входа в OpenCode Console; без него панель показывает `not connected`, а не падает. Подписка Go не обязательна: без неё лимитом выступают бюджеты Console.
 

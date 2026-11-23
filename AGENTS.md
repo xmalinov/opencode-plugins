@@ -4,7 +4,7 @@ A repository of plugins for OpenCode V2. It currently contains two plugins: `plu
 
 ## Target version
 
-- OpenCode V2 (verified on v2.2.0). Use `@opencode/plugin` and `Plugin.define({ id, setup })`.
+- OpenCode V2 (verified on v2.4.0). Use `@opencode/plugin` and `Plugin.define({ id, setup })`.
 - V1 plugins (`@opencode-ai/plugin`, a function-style plugin, the `"plugin"` field in config) do not run on V2. Do not copy V1 examples and do not mix the APIs.
 - Verify the API against https://opencode.ai/v2/docs/build/plugins and https://opencode.ai/v2/docs/build/plugins/server, not against V1 documentation.
 
