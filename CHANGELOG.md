@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
 ### Changed
 
 - Both plugins: verified on OpenCode `2.4.0`. `@opencode/plugin` is now `2.4.0`, the TUI peer range is `>=0.9.4` (the SDK's own requirement) and the dev dependencies use `@opentui/* 0.9.7`; the rest of the code needed no changes.
@@ -71,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation in English and Russian (`README.md`, `README.ru.md`).
 - MIT license, contribution guide, code of conduct and issue templates.
 
-[Unreleased]: https://github.com/xmalinov/opencode-plugins/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/xmalinov/opencode-plugins/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/xmalinov/opencode-plugins/releases/tag/v0.3.0
 [0.2.0]: https://github.com/xmalinov/opencode-plugins/releases/tag/v0.2.0
 [0.1.0]: https://github.com/xmalinov/opencode-plugins/releases/tag/v0.1.0

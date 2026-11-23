@@ -120,7 +120,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and the manual verificati
 
 ## Status
 
-Early (`0.1.x`). The plugins rely on `experimental.*` endpoints and on a price table that is valid as of **2026-10-27**. When DeepSeek changes prices, `plugins/tariff-pulse/src/data.ts` needs an update. Interfaces may change between minor versions until `1.0`.
+Early (`0.3.x`). The plugins rely on `experimental.*` endpoints and on a price table that is valid as of **2026-10-27**. When DeepSeek changes prices, `plugins/tariff-pulse/src/data.ts` needs an update. Interfaces may change between minor versions until `1.0`.
 
 ## License
 
